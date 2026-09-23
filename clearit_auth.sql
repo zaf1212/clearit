@@ -1,0 +1,19 @@
+-- =============================================================================
+-- CLEARIT — Login helpers (optional, only needed if you want server-side auth)
+-- These RPC functions require the pgcrypto extension.
+-- If pgcrypto is unavailable, the frontend uses bcryptjs instead (see app.js).
+-- =============================================================================
+
+-- Uncomment the lines below ONLY if pgcrypto loads successfully:
+-- CREATE EXTENSION IF NOT EXISTS "pgcrypto";
+--
+-- CREATE OR REPLACE FUNCTION rpc_login_student(p_institutional_id TEXT, p_password TEXT)
+-- RETURNS JSON LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+-- DECLARE v students%ROWTYPE;
+-- BEGIN
+--   SELECT * INTO v FROM students WHERE institutional_id = p_institutional_id;
+--   IF NOT FOUND THEN RETURN json_build_object('ok',false,'error','No account found.'); END IF;
+--   IF v.password_hash = crypt(p_password, v.password_hash) THEN
+--     RETURN json_build_object('ok',true,'id',v.id,'name',v.full_name,'email',v.email,'i_id',v.institutional_id,'block',v.year_block,'program',v.program);
+--   ELSE RETURN json_build_object('ok',false,'error','Invalid password.'); END IF;
+-- END; $$;

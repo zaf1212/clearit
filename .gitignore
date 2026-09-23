@@ -1,0 +1,18 @@
+# ── Local-only environment files ─────────────────────────────────────────
+# .env.local mirrors the PUBLIC anon key + URL for local convenience.
+# The app loads real config from supabaseConfig.js (committed). Keep these
+# local-only by convention.
+.env
+.env.local
+.env.*
+!.env.example
+
+# ── Supabase CLI local state (regenerated on `supabase link`) ────────────
+supabase/.temp/
+
+# ── Logs & OS junk ───────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+desktop.ini
