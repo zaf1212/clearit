@@ -69,9 +69,13 @@
   var remarkTarget     = null;
 
   /* ===================== Dark / Light theme ===================== */
-  // Global theme toggle for both portals, persisted in localStorage so the
-  // chosen theme survives refreshes and logins. initTheme() runs immediately
-  // (script loads at the end of <body>) to avoid a flash of the light theme.
+  // Global theme toggle for the login page and both portals, persisted in
+  // localStorage ('clearit-theme') so the chosen theme survives refreshes and
+  // logins. initTheme() runs immediately (script loads at the end of <body>)
+  // to avoid a flash of the light theme. The pre-existing 'theme' key is
+  // migrated on first load so previously saved dark preferences carry over.
+
+  var THEME_KEY = 'clearit-theme';
 
   function applyTheme (isDark) {
     if (isDark) {
@@ -80,8 +84,8 @@
       document.body.classList.remove('dark-theme');
     }
     try {
-      if (isDark) localStorage.setItem('theme', 'dark');
-      else localStorage.removeItem('theme');
+      if (isDark) localStorage.setItem(THEME_KEY, 'dark');
+      else localStorage.removeItem(THEME_KEY);
     } catch (e) { /* storage unavailable — theme still applies this session */ }
   }
 
@@ -91,7 +95,18 @@
 
   function initTheme () {
     var saved = null;
-    try { saved = localStorage.getItem('theme'); } catch (e) { saved = null; }
+    try {
+      saved = localStorage.getItem(THEME_KEY);
+      if (saved === null) {
+        // Migrate the older 'theme' key (previous deployments) once.
+        var legacy = localStorage.getItem('theme');
+        if (legacy === 'dark') {
+          saved = 'dark';
+          localStorage.setItem(THEME_KEY, 'dark');
+        }
+        localStorage.removeItem('theme');
+      }
+    } catch (e) { saved = null; }
     if (saved === 'dark') {
       document.body.classList.add('dark-theme');
     } else {
@@ -551,6 +566,9 @@
         // RBAC: only the SAS Director gets Semester Clearance Management
         var isSAS = isSASDirector();
         $('#sa-semester-mgmt').classList.toggle('hidden', !isSAS);
+
+        // RBAC: only the SAS Director gets Manage Blocks & Sections
+        $('#sa-blocks-mgmt').classList.toggle('hidden', !isSAS);
       } catch (err) {
         console.error(err);
         toast('Failed to load student data: ' + err.message, 'error');
@@ -576,6 +594,7 @@
     semesterEditTarget = null;
     $('#sa-manage-students').classList.add('hidden');
     $('#sa-semester-mgmt').classList.add('hidden');
+    $('#sa-blocks-mgmt').classList.add('hidden');
     showView('login');
   }
 
@@ -763,18 +782,21 @@
   // yet are appended so no record ever disappears.
   function buildSemesterStudents () {
     var map = {};
-    function seed (id, iId, name, block, program) {
+    function seed (id, iId, name, block, program, yearLevel, sectionBlock) {
       if (map[id]) return;
-      map[id] = { uuid: id, iId: iId, name: name, block: block, program: program, sigs: {} };
+      map[id] = {
+        uuid: id, iId: iId, name: name, block: block, program: program,
+        yearLevel: yearLevel || '', sectionBlock: sectionBlock || '', sigs: {}
+      };
       SIG_KEYS.forEach(function (k) {
         map[id].sigs[k] = { status: 'pending', remark: '', date: '', signatoryName: SIG_NAMES[k] || '' };
       });
     }
     semesterStudents.forEach(function (s) {
-      seed(s.student_id, s.institutional_id, s.full_name, s.year_block, s.program);
+      seed(s.student_id, s.institutional_id, s.full_name, s.year_block, s.program, s.yearLevel, s.sectionBlock);
     });
     allClearanceRows.forEach(function (r) {
-      seed(r.student_id, r.institutional_id, r.student_name, r.year_block, r.program);
+      seed(r.student_id, r.institutional_id, r.student_name, r.year_block, r.program, r.yearLevel, r.sectionBlock);
       var sig = map[r.student_id].sigs[r.category_key];
       if (sig) {
         sig.status = r.status;
@@ -789,6 +811,7 @@
   function renderSignatory () {
     var key = currentUser.catKey;
     var q   = $('#sa-search').value.trim().toLowerCase();
+    var yr  = $('#sa-year-filter').value;
     var blk = $('#sa-block-filter').value;
 
     // True when the selected semester has clearance records at all.
@@ -813,12 +836,26 @@
     $('#sa-user-email').textContent = currentUser.email;
     $('#sa-active-col').textContent = currentUser.catName;
 
-    // Block filter dropdown
+    // Year Level filter dropdown
+    var yearSet = {};
+    students.forEach(function (st) { if (st.yearLevel) yearSet[st.yearLevel] = true; });
+    var yearSel = $('#sa-year-filter');
+    var yearCur = yearSel.value;
+    yearSel.innerHTML = '<option value="">All Year Levels</option>';
+    Object.keys(yearSet).sort().forEach(function (y) {
+      var o = document.createElement('option');
+      o.value = y; o.textContent = y;
+      yearSel.appendChild(o);
+    });
+    if (yearCur) yearSel.value = yearCur;
+
+    // Section / Block filter dropdown (prefers the migrated section_block
+    // column, falls back to the combined year_block when unavailable).
     var blockSet = {};
-    students.forEach(function (st) { blockSet[st.block] = true; });
+    students.forEach(function (st) { var b = st.sectionBlock || st.block; if (b) blockSet[b] = true; });
     var sel = $('#sa-block-filter');
     var curVal = sel.value;
-    sel.innerHTML = '<option value="">All Year / Block</option>';
+    sel.innerHTML = '<option value="">All Sections</option>';
     Object.keys(blockSet).sort().forEach(function (b) {
       var o = document.createElement('option');
       o.value = b; o.textContent = b;
@@ -828,9 +865,10 @@
 
     // Filter
     var filtered = students.filter(function (st) {
-      var okBlk = !blk || st.block === blk;
+      var okYr  = !yr || st.yearLevel === yr;
+      var okBlk = !blk || (st.sectionBlock || st.block) === blk;
       var okQ   = !q || st.name.toLowerCase().indexOf(q) !== -1 || st.iId.toLowerCase().indexOf(q) !== -1;
-      return okBlk && okQ;
+      return okYr && okBlk && okQ;
     });
 
     $('#sa-count').textContent = filtered.length;
@@ -1331,6 +1369,8 @@
 
     var ay  = $('#sm-ay').value.trim();
     var sem = $('#sm-semester').value;
+    var initYear    = $('#sm-init-year').value;
+    var initSection = $('#sm-init-section').value.trim();
     if (!/^\d{4}-\d{4}$/.test(ay)) {
       $('#sm-error').textContent = 'Academic Year must be in YYYY-YYYY format, e.g. 2026-2027.';
       $('#sm-error').classList.remove('hidden');
@@ -1345,7 +1385,7 @@
       await DB.createSemester(sem, ay, currentUser.email);
       // Stamp all active students to the new term, then generate clearances.
       await DB.updateActiveStudentsSemester(sem, ay);
-      var count = await DB.initializeClearance(sem, ay);
+      var count = await DB.initializeClearance(sem, ay, initYear, initSection);
       ensureSemesterOption(sem, ay);
       await refreshSemesterOptions();
       fillAllSemesterSelects();
@@ -2001,6 +2041,117 @@
     renderSignatory();
   }
 
+  /* ===================== Blocks & Sections management (SAS Director) ===================== */
+
+  var blocksStudents    = [];   // all students loaded for the modal
+  var blocksSelected    = {};   // student UUID -> true
+  var blocksSearchTimer = null;
+
+  function blocksShownStudents () {
+    var yr = $('#blocks-year-filter').value;
+    var q  = $('#blocks-search').value.trim().toLowerCase();
+    return blocksStudents.filter(function (s) {
+      var okYr = !yr || (s.yearLevel || '') === yr;
+      var okQ  = !q ||
+        (s.full_name && s.full_name.toLowerCase().indexOf(q) !== -1) ||
+        (s.institutional_id && s.institutional_id.toLowerCase().indexOf(q) !== -1);
+      return okYr && okQ;
+    });
+  }
+
+  function updateBlocksSelectedCount () {
+    var n = Object.keys(blocksSelected).length;
+    $('#blocks-selected-count').textContent = n;
+    $('#blocks-apply-btn').disabled = n === 0;
+    $('#blocks-apply-btn').textContent = n ? 'Apply to ' + n + ' Selected' : 'Apply to Selected';
+  }
+
+  function syncBlocksCheckAll () {
+    var shown = blocksShownStudents();
+    $('#blocks-check-all').checked = shown.length > 0 &&
+      shown.every(function (s) { return blocksSelected[s.id]; });
+  }
+
+  function renderBlocksList () {
+    var shown = blocksShownStudents();
+    $('#blocks-shown-count').textContent = shown.length;
+    var rows = '';
+    shown.forEach(function (s) {
+      rows +=
+        '<tr>' +
+        '<td class="px-4 py-2.5"><input type="checkbox" data-blocks-check="' + s.id + '"' + (blocksSelected[s.id] ? ' checked' : '') + ' class="accent-navy-700" /></td>' +
+        '<td class="px-4 py-2.5"><div class="font-semibold text-slate-700">' + (s.full_name || '') + '</div><div class="text-xs text-slate-400 font-mono mt-0.5">' + (s.institutional_id || '') + '</div></td>' +
+        '<td class="px-4 py-2.5 text-xs font-semibold text-slate-600">' + (s.yearLevel || '<span class="text-slate-300">&mdash;</span>') + '</td>' +
+        '<td class="px-4 py-2.5"><span class="chip bg-navy-50 text-navy-700 ring-1 ring-inset ring-navy-100">' + (s.sectionBlock || s.block || '&mdash;') + '</span></td>' +
+        '</tr>';
+    });
+    $('#blocks-student-list').innerHTML = rows;
+    $('#blocks-empty').classList.toggle('hidden', shown.length > 0);
+    updateBlocksSelectedCount();
+    syncBlocksCheckAll();
+  }
+
+  async function loadBlocksStudents () {
+    try {
+      blocksStudents = await DB.getAllStudents();
+      renderBlocksList();
+    } catch (err) {
+      console.error('[CLEARIT] Blocks load error:', err);
+      $('#blocks-error').textContent = err.message;
+      $('#blocks-error').classList.remove('hidden');
+    }
+  }
+
+  function openBlocksModal () {
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+    $('#blocks-modal').classList.remove('hidden');
+    $('#blocks-error').classList.add('hidden');
+    blocksSelected = {};
+    loadBlocksStudents();
+  }
+
+  function closeBlocksModal () {
+    $('#blocks-modal').classList.add('hidden');
+  }
+
+  async function applyBlocksAssignment () {
+    if (!isSASDirector()) return;
+    var year    = $('#blocks-assign-year').value;
+    var section = $('#blocks-assign-section').value.trim();
+    var ids = Object.keys(blocksSelected);
+    if (!ids.length) { toast('Select at least one student first.', 'error'); return; }
+    if (!year && !section) { toast('Choose a Year Level and/or Section to assign.', 'error'); return; }
+
+    var updates = [];
+    blocksStudents.forEach(function (s) {
+      if (!blocksSelected[s.id]) return;
+      var y   = year || s.yearLevel || '';
+      var sec = section || s.sectionBlock || '';
+      var yb  = (y && sec) ? (y + ' / ' + sec) : (y || sec || s.year_block || '');
+      updates.push({ id: s.id, year_level: y, section_block: sec, year_block: yb });
+    });
+
+    var btn = $('#blocks-apply-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    $('#blocks-error').classList.add('hidden');
+    try {
+      var n = await DB.assignStudentsYearSection(updates);
+      toast('Updated ' + n + ' student record(s).', 'success');
+      blocksSelected = {};
+      $('#blocks-check-all').checked = false;
+      await loadBlocksStudents();
+      // Reflect the new Year/Section values on whichever dashboard is visible.
+      if (currentUser && currentUser.type === 'signatory') await refreshSignatoryData();
+    } catch (err) {
+      console.error('[CLEARIT] Blocks assignment error:', err);
+      $('#blocks-error').textContent = err.message;
+      $('#blocks-error').classList.remove('hidden');
+    } finally {
+      updateBlocksSelectedCount();
+    }
+  }
+
   /* ===================== Events ===================== */
 
   async function init () {
@@ -2125,7 +2276,8 @@
       }
     });
 
-    // Theme toggle (dark / light) across both portals
+    // Theme toggle (dark / light) on the login page and across both portals
+    $('#login-theme-toggle').addEventListener('click', toggleTheme);
     $('#sv-theme-toggle').addEventListener('click', toggleTheme);
     $('#sa-theme-toggle').addEventListener('click', toggleTheme);
 
@@ -2181,6 +2333,9 @@
       filterTimer = setTimeout(function () {
         if (currentUser && currentUser.type === 'signatory') renderSignatory();
       }, 150);
+    });
+    $('#sa-year-filter').addEventListener('change', function () {
+      if (currentUser && currentUser.type === 'signatory') renderSignatory();
     });
     $('#sa-block-filter').addEventListener('change', function () {
       if (currentUser && currentUser.type === 'signatory') renderSignatory();
@@ -2307,6 +2462,33 @@
       refreshSignatoryData();
     });
 
+    // Blocks & Sections management (SAS Director only)
+    $('#sa-blocks-mgmt').addEventListener('click', openBlocksModal);
+    $('#blocks-close').addEventListener('click', closeBlocksModal);
+    $('#blocks-backdrop').addEventListener('click', closeBlocksModal);
+    $('#blocks-year-filter').addEventListener('change', renderBlocksList);
+    $('#blocks-search').addEventListener('input', function () {
+      clearTimeout(blocksSearchTimer);
+      blocksSearchTimer = setTimeout(renderBlocksList, 150);
+    });
+    $('#blocks-check-all').addEventListener('change', function () {
+      var on = this.checked;
+      blocksShownStudents().forEach(function (s) {
+        if (on) blocksSelected[s.id] = true;
+        else delete blocksSelected[s.id];
+      });
+      renderBlocksList();
+    });
+    $('#blocks-student-list').addEventListener('change', function (e) {
+      var cb = e.target.closest('input[data-blocks-check]');
+      if (!cb) return;
+      if (cb.checked) blocksSelected[cb.dataset.blocksCheck] = true;
+      else delete blocksSelected[cb.dataset.blocksCheck];
+      updateBlocksSelectedCount();
+      syncBlocksCheckAll();
+    });
+    $('#blocks-apply-btn').addEventListener('click', applyBlocksAssignment);
+
     // Admin student management modal
     $('#sa-manage-students').addEventListener('click', openAdminModal);
     $('#admin-close').addEventListener('click', closeAdminModal);
@@ -2372,6 +2554,9 @@
         else if (!$('#semester-mgmt-modal').classList.contains('hidden')) {
           if (!$('#sm-edit-panel').classList.contains('hidden')) closeSemesterEdit();
           else closeSemesterMgmtModal();
+        }
+        else if (!$('#blocks-modal').classList.contains('hidden')) {
+          closeBlocksModal();
         }
         else if (!$('#admin-modal').classList.contains('hidden')) {
           if (!$('#admin-register-panel').classList.contains('hidden')) closeAdminRegister();

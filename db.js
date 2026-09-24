@@ -26,6 +26,17 @@ var DB = (function () {
     return new Error((context ? context + ': ' : '') + raw);
   }
 
+  // Split the legacy combined "1st Year / Charity" value into Year + Section.
+  function splitYearBlock (yearBlock) {
+    var year = '', section = '';
+    if (yearBlock) {
+      var parts = String(yearBlock).split('/').map(function (p) { return p.trim(); });
+      year = parts[0] || '';
+      section = parts[1] || '';
+    }
+    return { yearLevel: year, sectionBlock: section };
+  }
+
   // ── Signatory categories ───────────────────────────────────────────────
   async function getCategories () {
     var { data, error } = await window.supabase
@@ -130,53 +141,63 @@ var DB = (function () {
 
   // ── Students with clearance for one semester (signatory dashboard) ─────
   async function getAllStudentClearance (semester, academicYear) {
-    var q = window.supabase
-      .from('v_clearance_details')
-      .select('student_id, institutional_id, student_name, year_block, program, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name')
-      .order('display_order');
-    if (semester) q = q.eq('record_semester', semester);
-    if (academicYear) q = q.eq('record_academic_year', academicYear);
-    var { data, error } = await q;
-    if (error) throw friendlyError(error, 'Could not load student clearances');
-    return data || [];
+    // Try with the migrated year_level / section_block columns first, then
+    // fall back to the pre-migration shape (year/section derived from year_block).
+    var attempts = [
+      'student_id, institutional_id, student_name, year_block, program, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
+      'student_id, institutional_id, student_name, year_block, program, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name'
+    ];
+    var rows = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var q = window.supabase.from('v_clearance_details').select(attempts[i]).order('display_order');
+      if (semester) q = q.eq('record_semester', semester);
+      if (academicYear) q = q.eq('record_academic_year', academicYear);
+      var r = await q;
+      if (!r.error) { rows = r.data || []; break; }
+      lastErr = r.error;
+    }
+    if (!rows) throw friendlyError(lastErr, 'Could not load student clearances');
+    return rows.map(function (r) {
+      var parts = splitYearBlock(r.year_block);
+      r.yearLevel = r.year_level || parts.yearLevel;
+      r.sectionBlock = r.section_block || parts.sectionBlock;
+      return r;
+    });
   }
 
   // ── Students whose semester / A.Y. tags match the SELECTED term ──────────
   // Reads v_student_progress (cohort + progress, filtered by the same semester
   // as the clearance records) so the dashboard always reflects the dropdown.
-  // Falls back to the students table if the view isn't installed yet.
+  // Falls back to the students table if the view isn't installed yet, and to
+  // splitting year_block if the migrated year_level/section_block columns
+  // (or the view columns) don't exist yet.
   async function getStudentsForSemester (semester, academicYear) {
-    try {
-      var q = window.supabase
-        .from('v_student_progress')
-        .select('student_id, institutional_id, full_name, year_block, program')
-        .in('enrollment_status', ['Regular', 'Irregular']);
+    var attempts = [
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, year_level, section_block' },
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, year_level, section_block' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program' }
+    ];
+    var rows = null, lastErr = null, usedIdKey = 'student_id';
+    for (var i = 0; i < attempts.length; i++) {
+      var a = attempts[i];
+      var q = window.supabase.from(a.from).select(a.cols).in('enrollment_status', ['Regular', 'Irregular']);
       if (semester) q = q.eq('semester', semester);
       if (academicYear) q = q.eq('academic_year', academicYear);
-      var { data, error } = await q;
-      if (error) throw friendlyError(error, 'Could not load students for this term');
-      return (data || []).map(function (r) {
-        return {
-          student_id: r.student_id, institutional_id: r.institutional_id,
-          full_name: r.full_name, year_block: r.year_block, program: r.program
-        };
-      });
-    } catch (e) {
-      var q2 = window.supabase
-        .from('students')
-        .select('id, institutional_id, full_name, year_block, program')
-        .in('enrollment_status', ['Regular', 'Irregular']);
-      if (semester) q2 = q2.eq('semester', semester);
-      if (academicYear) q2 = q2.eq('academic_year', academicYear);
-      var { data, error } = await q2;
-      if (error) throw friendlyError(error, 'Could not load students for this term');
-      return (data || []).map(function (r) {
-        return {
-          student_id: r.id, institutional_id: r.institutional_id,
-          full_name: r.full_name, year_block: r.year_block, program: r.program
-        };
-      });
+      var r = await q;
+      if (!r.error) { rows = r.data || []; usedIdKey = a.idKey; break; }
+      lastErr = r.error;
     }
+    if (!rows) throw friendlyError(lastErr, 'Could not load students for this term');
+    return rows.map(function (r) {
+      var parts = splitYearBlock(r.year_block);
+      return {
+        student_id: r[usedIdKey], institutional_id: r.institutional_id,
+        full_name: r.full_name, year_block: r.year_block, program: r.program,
+        yearLevel: r.year_level || parts.yearLevel,
+        sectionBlock: r.section_block || parts.sectionBlock
+      };
+    });
   }
 
   // ── Stamp ALL ACTIVE students with the newly initialized term ───────────
@@ -217,26 +238,28 @@ var DB = (function () {
   }
 
   // ── Admin: get all students ─────────────────────────────────────────────
+  // Decorate each row with camelCase yearLevel / sectionBlock: from the
+  // migrated columns when present, otherwise split from year_block.
   async function getAllStudents () {
-    try {
-      var r1 = await window.supabase
-        .from('students')
-        .select('id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count')
-        .order('institutional_id');
-      if (r1.error) throw r1.error;
-      return r1.data || [];
-    } catch (e) {
-      // Graceful degrade if the SQL migration hasn't run yet (column missing).
-      var r2 = await window.supabase
-        .from('students')
-        .select('id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date')
-        .order('institutional_id');
-      if (r2.error) throw friendlyError(r2.error, 'Could not load the student list');
-      return (r2.data || []).map(function (s) {
-        s.password_change_count = 0;
-        return s;
-      });
+    var attempts = [
+      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count, year_level, section_block',
+      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count',
+      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date'
+    ];
+    var rows = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await window.supabase.from('students').select(attempts[i]).order('institutional_id');
+      if (!r.error) { rows = r.data || []; break; }
+      lastErr = r.error;
     }
+    if (!rows) throw friendlyError(lastErr, 'Could not load the student list');
+    return rows.map(function (s) {
+      if (!('password_change_count' in s)) s.password_change_count = 0;
+      var parts = splitYearBlock(s.year_block);
+      s.yearLevel = s.year_level || parts.yearLevel;
+      s.sectionBlock = s.section_block || parts.sectionBlock;
+      return s;
+    });
   }
 
   // ── Student: change own password (new hash + incremented change counter) ─
@@ -304,6 +327,29 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not update the student');
   }
 
+  // ── SAS Director: batch-assign Year Level + Section/Block to students ──
+  // updates: [{ id, year_level, section_block, year_block }]. Also rewrites
+  // the legacy combined year_block so every existing dashboard that displays
+  // it (student + signatory views) reflects the new value immediately.
+  async function assignStudentsYearSection (updates) {
+    if (!updates || !updates.length) throw new Error('No students selected.');
+    var results = await Promise.all(updates.map(function (u) {
+      return window.supabase
+        .from('students')
+        .update({
+          year_level:    u.year_level,
+          section_block: u.section_block,
+          year_block:    u.year_block
+        })
+        .eq('id', u.id);
+    }));
+    var failed = results.filter(function (r) { return r.error; });
+    if (failed.length) {
+      throw friendlyError(failed[0].error, 'Could not update student records — run clearit_year_section_migration.sql in the Supabase SQL editor first (Year/Section columns missing)');
+    }
+    return updates.length;
+  }
+
   // ── Admin: register a new student + initialize clearance records ──────
   async function createStudent (studentFields) {
     var { data: student, error: err1 } = await window.supabase
@@ -334,13 +380,21 @@ var DB = (function () {
     return student.id;
   }
 
-  // ── Starting a new semester cycle: initialize clearances for ALL ACTIVE students
-  async function initializeClearance (semester, academicYear) {
-    var { data, error } = await window.supabase.rpc('fn_init_clearance', {
-      p_semester:      semester,
-      p_academic_year: academicYear
-    });
-    if (error) throw friendlyError(error, 'Could not initialize clearance records');
+  // ── Starting a new semester cycle: initialize clearances for ACTIVE students
+  // Optional p_year_level / p_section_block narrow the batch to a specific
+  // Year Level and/or Section (requires the year/section DB migration; the
+  // 2-argument call keeps working on pre-migration databases).
+  async function initializeClearance (semester, academicYear, yearLevel, sectionBlock) {
+    var params = { p_semester: semester, p_academic_year: academicYear };
+    if (yearLevel)    params.p_year_level = yearLevel;
+    if (sectionBlock) params.p_section_block = sectionBlock;
+    var { data, error } = await window.supabase.rpc('fn_init_clearance', params);
+    if (error) {
+      if (yearLevel || sectionBlock) {
+        throw friendlyError(error, 'Year/Section filtering requires the database migration — run clearit_year_section_migration.sql in the Supabase SQL editor');
+      }
+      throw friendlyError(error, 'Could not initialize clearance records');
+    }
     return data || 0;
   }
 
@@ -532,6 +586,7 @@ var DB = (function () {
     updateActiveStudentsSemester: updateActiveStudentsSemester,
     getAllStudents:          getAllStudents,
     updateStudent:          updateStudent,
+    assignStudentsYearSection: assignStudentsYearSection,
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,

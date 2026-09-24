@@ -46,6 +46,8 @@ CREATE TABLE students (
   email             TEXT        UNIQUE NOT NULL,
   password_hash     TEXT        NOT NULL,
   year_block        TEXT        NOT NULL,
+  year_level        TEXT,
+  section_block     TEXT,
   program           TEXT        NOT NULL DEFAULT 'BSIT',
   semester          TEXT        NOT NULL DEFAULT '1st Semester',
   academic_year     TEXT        NOT NULL DEFAULT '2025-2026',
@@ -102,6 +104,8 @@ CREATE TABLE clearance_records (
 -- =============================================================================
 CREATE INDEX idx_students_inst_id        ON students (institutional_id);
 CREATE INDEX idx_students_year_block     ON students (year_block);
+CREATE INDEX idx_students_year_level     ON students (year_level);
+CREATE INDEX idx_students_section_block  ON students (section_block);
 CREATE INDEX idx_signatories_category    ON signatories (category_id);
 CREATE INDEX idx_clearance_student       ON clearance_records (student_id);
 CREATE INDEX idx_clearance_semester      ON clearance_records (student_id, semester, academic_year);
@@ -151,9 +155,13 @@ $$;
 -- office, for the given semester/A.Y. Records that already exist for that
 -- (student, semester, A.Y., office) are left untouched, so old history is
 -- preserved. Returns the number of new records created.
+-- Optional p_year_level / p_section_block narrow the batch (used by the SAS
+-- Director's semester initialization filters).
 CREATE OR REPLACE FUNCTION fn_init_clearance(
-  p_semester      TEXT,
-  p_academic_year TEXT
+  p_semester       TEXT,
+  p_academic_year  TEXT,
+  p_year_level     TEXT DEFAULT NULL,
+  p_section_block  TEXT DEFAULT NULL
 ) RETURNS INTEGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
@@ -165,6 +173,8 @@ BEGIN
   FROM students s
   CROSS JOIN signatory_categories c
   WHERE s.enrollment_status IN ('Regular','Irregular')
+    AND (p_year_level    IS NULL OR s.year_level    = p_year_level)
+    AND (p_section_block IS NULL OR s.section_block = p_section_block)
   ON CONFLICT (student_id, semester, academic_year, category_id) DO NOTHING;
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
@@ -256,7 +266,8 @@ $$;
 
 CREATE OR REPLACE VIEW v_student_progress AS
 SELECT
-  s.id AS student_id, s.institutional_id, s.full_name, s.year_block, s.program,
+  s.id AS student_id, s.institutional_id, s.full_name, s.year_block,
+  s.year_level, s.section_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   (SELECT COUNT(*) FROM signatory_categories) AS total_requirements,
   COALESCE(cc.cleared_count, 0) AS cleared_count,
@@ -284,7 +295,7 @@ LEFT JOIN LATERAL (
 CREATE OR REPLACE VIEW v_clearance_details AS
 SELECT
   cr.id AS record_id, cr.student_id, s.institutional_id,
-  s.full_name AS student_name, s.year_block, s.program,
+  s.full_name AS student_name, s.year_block, s.year_level, s.section_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   cr.semester AS record_semester, cr.academic_year AS record_academic_year,
   sc.key AS category_key, sc.name AS category_name,
@@ -320,12 +331,12 @@ INSERT INTO signatory_categories (id, key, name, signatory_name, display_order) 
   ('a0000000-0000-0000-0000-000000000010','president',        'College President (Final Approval)',    'Richel N. Bacaltos, Ed.D.',               10);
 
 -- 6b. Students
-INSERT INTO students (id, institutional_id, full_name, email, password_hash, year_block, program, semester, academic_year, enrollment_status, paid, paid_date) VALUES
-  ('b0000000-0000-0000-0000-000000000001','2023-5548','Jerame Abing',    'jerame.abing@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Generosity','BSINDTECH-COMPTECH','2nd Semester','2025-2026','Regular', true, '2026-05-19'),
-  ('b0000000-0000-0000-0000-000000000002','2023-5549','Maria Santos',    'maria.santos@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Charity',  'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-20'),
-  ('b0000000-0000-0000-0000-000000000003','2024-6601','Pedro Reyes',     'pedro.reyes@tcc.edu.ph',      crypt('password123',gen_salt('bf')),'2nd Year / Faith',    'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-21'),
-  ('b0000000-0000-0000-0000-000000000004','2022-7710','Ana Garcia',      'ana.garcia@tcc.edu.ph',       crypt('password123',gen_salt('bf')),'4th Year / Hope',     'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-18'),
-  ('b0000000-0000-0000-0000-000000000005','2023-5550','Jose Ramirez',    'jose.ramirez@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Love',     'BSIT',               '2nd Semester','2025-2026','Regular', false, NULL);
+INSERT INTO students (id, institutional_id, full_name, email, password_hash, year_block, year_level, section_block, program, semester, academic_year, enrollment_status, paid, paid_date) VALUES
+  ('b0000000-0000-0000-0000-000000000001','2023-5548','Jerame Abing',    'jerame.abing@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Generosity','3rd Year','Generosity','BSINDTECH-COMPTECH','2nd Semester','2025-2026','Regular', true, '2026-05-19'),
+  ('b0000000-0000-0000-0000-000000000002','2023-5549','Maria Santos',    'maria.santos@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Charity',  '3rd Year','Charity',  'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-20'),
+  ('b0000000-0000-0000-0000-000000000003','2024-6601','Pedro Reyes',     'pedro.reyes@tcc.edu.ph',      crypt('password123',gen_salt('bf')),'2nd Year / Faith',    '2nd Year','Faith',    'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-21'),
+  ('b0000000-0000-0000-0000-000000000004','2022-7710','Ana Garcia',      'ana.garcia@tcc.edu.ph',       crypt('password123',gen_salt('bf')),'4th Year / Hope',     '4th Year','Hope',     'BSIT',               '2nd Semester','2025-2026','Regular', true, '2026-05-18'),
+  ('b0000000-0000-0000-0000-000000000005','2023-5550','Jose Ramirez',    'jose.ramirez@tcc.edu.ph',     crypt('password123',gen_salt('bf')),'3rd Year / Love',     '3rd Year','Love',     'BSIT',               '2nd Semester','2025-2026','Regular', false, NULL);
 
 -- 6c. Signatories
 INSERT INTO signatories (id, email, password_hash, full_name, role, category_id) VALUES

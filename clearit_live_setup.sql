@@ -62,6 +62,26 @@ UPDATE signatories SET role = 'sas_director' WHERE email = 'jennilyn.geagonia@tc
 ALTER TABLE students ADD COLUMN IF NOT EXISTS password_change_count INT NOT NULL DEFAULT 0;
 
 -- -----------------------------------------------------------------------------
+-- 2c. students: Year Level + Section/Block management (SAS Director)
+--     Adds the two new columns, backfills them from the legacy combined
+--     year_block ("3rd Year / Charity" → year_level='3rd Year',
+--     section_block='Charity'), and indexes the new filter columns.
+-- -----------------------------------------------------------------------------
+ALTER TABLE students ADD COLUMN IF NOT EXISTS year_level    TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS section_block TEXT;
+
+UPDATE students
+SET year_level = NULLIF(btrim(split_part(year_block, '/', 1)), '')
+WHERE year_level IS NULL AND year_block IS NOT NULL;
+
+UPDATE students
+SET section_block = NULLIF(btrim(split_part(year_block, '/', 2)), '')
+WHERE section_block IS NULL AND year_block IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_students_year_level    ON students (year_level);
+CREATE INDEX IF NOT EXISTS idx_students_section_block ON students (section_block);
+
+-- -----------------------------------------------------------------------------
 -- 3. semesters table (one row per academic semester; at most one active)
 -- -----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS semesters (
@@ -116,11 +136,15 @@ BEGIN
 END;
 $$;
 
--- Batch-initialize clearances for ALL ACTIVE students (Regular/Irregular only).
+-- Batch-initialize clearances for ACTIVE students (Regular/Irregular only).
 -- Existing records for the same (student, semester, A.Y., office) are skipped.
+-- Optional p_year_level / p_section_block narrow the batch to a Year Level
+-- and/or Section (used by the SAS Director's semester initialization filters).
 CREATE OR REPLACE FUNCTION fn_init_clearance(
-  p_semester      TEXT,
-  p_academic_year TEXT
+  p_semester       TEXT,
+  p_academic_year  TEXT,
+  p_year_level     TEXT DEFAULT NULL,
+  p_section_block  TEXT DEFAULT NULL
 ) RETURNS INTEGER
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
@@ -132,6 +156,8 @@ BEGIN
   FROM students s
   CROSS JOIN signatory_categories c
   WHERE s.enrollment_status IN ('Regular','Irregular')
+    AND (p_year_level    IS NULL OR s.year_level    = p_year_level)
+    AND (p_section_block IS NULL OR s.section_block = p_section_block)
   ON CONFLICT (student_id, semester, academic_year, category_id) DO NOTHING;
 
   GET DIAGNOSTICS v_count = ROW_COUNT;
@@ -223,7 +249,8 @@ DROP VIEW IF EXISTS v_student_progress  CASCADE;
 
 CREATE OR REPLACE VIEW v_student_progress AS
 SELECT
-  s.id AS student_id, s.institutional_id, s.full_name, s.year_block, s.program,
+  s.id AS student_id, s.institutional_id, s.full_name, s.year_block,
+  s.year_level, s.section_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   (SELECT COUNT(*) FROM signatory_categories) AS total_requirements,
   COALESCE(cc.cleared_count, 0) AS cleared_count,
@@ -251,7 +278,7 @@ LEFT JOIN LATERAL (
 CREATE OR REPLACE VIEW v_clearance_details AS
 SELECT
   cr.id AS record_id, cr.student_id, s.institutional_id,
-  s.full_name AS student_name, s.year_block, s.program,
+  s.full_name AS student_name, s.year_block, s.year_level, s.section_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   cr.semester AS record_semester, cr.academic_year AS record_academic_year,
   sc.key AS category_key, sc.name AS category_name,

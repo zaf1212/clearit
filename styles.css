@@ -188,6 +188,18 @@ th.active-col {
 .theme-toggle .icon-sun { display: none; }
 .theme-toggle .icon-moon { display: inline; }
 
+/* Login page: the toggle floats over the navy gradient — give it a subtle
+   translucent pill so it reads clearly while the page is still light. */
+.login-bg .theme-toggle {
+  border-color: rgba(255, 255, 255, 0.35);
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.08);
+}
+.login-bg .theme-toggle:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+}
+
 .dark-theme .theme-toggle {
   border-color: #334155;
   color: #f8fafc;

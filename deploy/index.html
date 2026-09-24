@@ -85,6 +85,9 @@
 
   <!-- ==================== LOGIN VIEW ==================== -->
   <main id="login-view" class="login-bg min-h-screen flex flex-col items-center justify-center px-4 py-10">
+    <button id="login-theme-toggle" type="button" class="theme-toggle fixed top-4 right-4 z-50" title="Toggle dark / light theme" aria-label="Toggle dark / light theme">
+      <span class="icon-moon" aria-hidden="true">🌙</span><span class="icon-sun" aria-hidden="true">☀️</span>
+    </button>
     <div class="w-full max-w-md fade-in flex-1 flex flex-col justify-center">
       <div class="text-center mb-6">
         <img src="tcc-logo.png" alt="Talisay City College Seal" class="mx-auto w-24 h-24 rounded-full shadow-lg shadow-tcc-navy/40 border-4 border-white bg-white object-contain p-1" />
@@ -343,6 +346,10 @@
             <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
             Semester Management
           </button>
+          <button id="sa-blocks-mgmt" title="Manage Student Blocks &amp; Sections" class="hidden rounded-lg border border-navy-200 bg-navy-50 px-3 py-1.5 text-sm font-semibold text-navy-700 hover:bg-navy-100 transition">
+            <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            Manage Blocks &amp; Sections
+          </button>
           <button id="sa-theme-toggle" type="button" class="theme-toggle" title="Toggle dark / light theme" aria-label="Toggle dark / light theme">
             <span class="icon-moon" aria-hidden="true">🌙</span><span class="icon-sun" aria-hidden="true">☀️</span>
           </button>
@@ -419,6 +426,7 @@
             <input id="sa-search" type="text" placeholder="Search by name or student ID..."
               class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 pl-9 pr-3 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
           </div>
+          <select id="sa-year-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-40 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
           <select id="sa-block-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-44 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
           <div class="flex items-center gap-2 text-xs text-slate-500 md:ml-auto">
             <span class="w-2.5 h-2.5 rounded-full bg-navy-600 animate-pulse"></span>
@@ -753,6 +761,24 @@
                   </select>
                 </div>
               </div>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+                <div>
+                  <label for="sm-init-year" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level (optional)</label>
+                  <select id="sm-init-year" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
+                    <option value="">All Year Levels</option>
+                    <option>1st Year</option>
+                    <option>2nd Year</option>
+                    <option>3rd Year</option>
+                    <option>4th Year</option>
+                  </select>
+                </div>
+                <div>
+                  <label for="sm-init-section" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Section / Block (optional)</label>
+                  <input id="sm-init-section" type="text" list="section-options" placeholder="e.g. BSIT 1-A — blank = all sections"
+                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+                </div>
+              </div>
+              <p class="text-[11px] text-slate-400 mb-4">Leave both blank to initialize <b>all active students</b>. Year / Section filtering requires the database migration (<code>clearit_year_section_migration.sql</code>).</p>
               <div id="sm-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
               <button id="sm-init-btn" data-orig-text="Initialize Clearance for All Active Students" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition whitespace-nowrap">
                 <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -820,6 +846,125 @@
       </div>
     </div>
   </div>
+
+  <!-- ==================== BLOCKS & SECTIONS MANAGEMENT MODAL (SAS DIRECTOR ONLY) ==================== -->
+  <div id="blocks-modal" class="hidden fixed inset-0 z-50">
+    <div id="blocks-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
+    <div class="relative min-h-full flex items-center justify-center p-4">
+      <div class="fade-in w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+
+        <!-- Header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800">Manage Student Blocks &amp; Sections</h3>
+              <p class="text-xs text-slate-500">SAS Director &mdash; batch-assign Year Level and Section / Block to students</p>
+            </div>
+          </div>
+          <button id="blocks-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <!-- Body -->
+        <div class="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+          <div id="blocks-error" class="hidden rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
+
+          <!-- Filters -->
+          <div class="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <p class="text-xs text-slate-500 leading-relaxed">
+              Filter students by Year Level, then select the ones to assign. The assignment updates
+              <b>Year Level</b> and <b>Section / Block</b> everywhere — student &amp; signatory dashboards included.
+            </p>
+            <div class="flex flex-col sm:flex-row gap-3">
+              <select id="blocks-year-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm sm:w-44 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
+                <option value="">All Year Levels</option>
+                <option>1st Year</option>
+                <option>2nd Year</option>
+                <option>3rd Year</option>
+                <option>4th Year</option>
+              </select>
+              <div class="relative flex-1">
+                <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+                </span>
+                <input id="blocks-search" type="text" placeholder="Search by name or student ID..."
+                  class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2 pl-9 pr-3 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+              </div>
+              <span class="inline-flex items-center gap-1.5 text-xs text-slate-500 sm:ml-auto whitespace-nowrap">
+                <span id="blocks-selected-count">0</span> selected of <span id="blocks-shown-count">0</span> shown
+              </span>
+            </div>
+          </div>
+
+          <!-- Batch assignment controls -->
+          <div class="rounded-2xl border border-amber-200 bg-amber-50/50 p-4">
+            <div class="flex items-center gap-2 mb-3">
+              <span class="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              </span>
+              <h4 class="font-bold text-slate-800">Assign Selected Students To</h4>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label for="blocks-assign-year" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level</label>
+                <select id="blocks-assign-year" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
+                  <option value="">Keep current</option>
+                  <option>1st Year</option>
+                  <option>2nd Year</option>
+                  <option>3rd Year</option>
+                  <option>4th Year</option>
+                </select>
+              </div>
+              <div>
+                <label for="blocks-assign-section" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Section / Block</label>
+                <input id="blocks-assign-section" type="text" list="section-options" placeholder="e.g. BSIT 1-A"
+                  class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+              </div>
+              <div class="flex items-end">
+                <button id="blocks-apply-btn" data-orig-text="Apply to Selected" disabled
+                  class="rounded-lg bg-amber-600 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed disabled:shadow-none whitespace-nowrap w-full">
+                  Apply to Selected
+                </button>
+              </div>
+            </div>
+            <p class="text-[11px] text-amber-700/80 mt-2.5">Leave a field blank to keep each student's current value.</p>
+          </div>
+
+          <!-- Student list -->
+          <div class="rounded-xl border border-slate-200 overflow-hidden">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                  <th class="px-4 py-3 font-semibold w-10"><input id="blocks-check-all" type="checkbox" class="accent-navy-700" aria-label="Select all shown students" /></th>
+                  <th class="px-4 py-3 font-semibold">Student</th>
+                  <th class="px-4 py-3 font-semibold">Year Level</th>
+                  <th class="px-4 py-3 font-semibold">Section / Block</th>
+                </tr>
+              </thead>
+              <tbody id="blocks-student-list" class="divide-y divide-slate-100"></tbody>
+            </table>
+            <div id="blocks-empty" class="hidden px-4 py-8 text-center">
+              <p class="text-sm text-slate-500 font-semibold">No students match your filters.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <datalist id="section-options">
+    <option value="BSIT 1-A"></option>
+    <option value="BSIT 1-B"></option>
+    <option value="BSCS 2-A"></option>
+    <option value="BSCS 2-B"></option>
+    <option value="BSIT 3-A"></option>
+    <option value="BSIT 3-B"></option>
+    <option value="BSIT 4-A"></option>
+  </datalist>
 
   <!-- ==================== ADMIN STUDENT MANAGEMENT MODAL ==================== -->
   <div id="admin-modal" class="hidden fixed inset-0 z-50">
