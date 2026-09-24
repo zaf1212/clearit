@@ -67,8 +67,7 @@ $$;
 --    dashboard's Year / Section filters and the SAS batch list get them).
 CREATE OR REPLACE VIEW v_student_progress AS
 SELECT
-  s.id AS student_id, s.institutional_id, s.full_name, s.year_block,
-  s.year_level, s.section_block, s.program,
+  s.id AS student_id, s.institutional_id, s.full_name, s.year_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   (SELECT COUNT(*) FROM signatory_categories) AS total_requirements,
   COALESCE(cc.cleared_count, 0) AS cleared_count,
@@ -85,7 +84,8 @@ SELECT
                    AND cr3.semester=s.semester AND cr3.academic_year=s.academic_year) THEN 'pending'
     WHEN COALESCE(cc.cleared_count,0) = (SELECT COUNT(*) FROM signatory_categories) THEN 'cleared'
     ELSE 'pending'
-  END AS overall_status
+  END AS overall_status,
+  s.year_level, s.section_block
 FROM students s
 LEFT JOIN LATERAL (
   SELECT COUNT(*)::INT AS cleared_count FROM clearance_records cr
@@ -96,13 +96,14 @@ LEFT JOIN LATERAL (
 CREATE OR REPLACE VIEW v_clearance_details AS
 SELECT
   cr.id AS record_id, cr.student_id, s.institutional_id,
-  s.full_name AS student_name, s.year_block, s.year_level, s.section_block, s.program,
+  s.full_name AS student_name, s.year_block, s.program,
   s.semester, s.academic_year, s.enrollment_status, s.paid, s.paid_date,
   cr.semester AS record_semester, cr.academic_year AS record_academic_year,
   sc.key AS category_key, sc.name AS category_name,
   sc.signatory_name, sc.display_order,
   cr.status, cr.remarks, cr.signed_at, cr.signed_by,
-  sg.full_name AS signed_by_name
+  sg.full_name AS signed_by_name,
+  s.year_level, s.section_block
 FROM clearance_records cr
 JOIN students s              ON s.id  = cr.student_id
 JOIN signatory_categories sc ON sc.id = cr.category_id
