@@ -262,6 +262,29 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not change the password');
   }
 
+  // ── Forgot Password (login page): account lookup by identifier ──────────
+  // No password verification — used only to confirm an account exists before
+  // writing a fresh hash. Returns the stable UUID + display info.
+  async function findStudentByInstitutionalId (institutionalId) {
+    var { data, error } = await window.supabase
+      .from('students')
+      .select('id, full_name, email, institutional_id, password_change_count')
+      .eq('institutional_id', institutionalId)
+      .maybeSingle();
+    if (error) throw friendlyError(error, 'Could not verify the student account');
+    return data || null;
+  }
+
+  async function findSignatoryByEmail (email) {
+    var { data, error } = await window.supabase
+      .from('signatories')
+      .select('id, full_name, email, role')
+      .eq('email', email)
+      .maybeSingle();
+    if (error) throw friendlyError(error, 'Could not verify the signatory account');
+    return data || null;
+  }
+
   // ── Admin (SAS Director): reset a student's change counter back to 0 ───
   async function resetPasswordChangeCount (studentUUID) {
     var { error } = await window.supabase
@@ -511,6 +534,8 @@ var DB = (function () {
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,
+    findStudentByInstitutionalId: findStudentByInstitutionalId,
+    findSignatoryByEmail: findSignatoryByEmail,
     resetPasswordChangeCount: resetPasswordChangeCount,
     initializeClearance:    initializeClearance,
     approveClearance:       approveClearance,

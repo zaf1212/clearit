@@ -65,6 +65,7 @@
   var categories       = [];  // [{ id, key, name, signatory_name }]
   var currentUser      = null; // student or signatory session
   var currentLoginTab  = 'student';
+  var forgotRole       = 'student'; // role selected inside the Forgot Password modal
   var remarkTarget     = null;
 
   var studentClearanceRows = [];
@@ -1700,6 +1701,101 @@
     document.body.style.overflow = '';
   }
 
+  /* ===================== Forgot Password (login page) ===================== */
+  // Real recovery flow for a static site with no email backend: pick the
+  // account type (Student / Signatory), enter the Student ID or email, and
+  // set a fresh password immediately. Student resets consume the 3-change
+  // allowance; blocked students are directed to the SAS Office.
+
+  function openForgotModal () {
+    setForgotRole(currentLoginTab === 'signatory' ? 'signatory' : 'student');
+    $('#forgot-error').classList.add('hidden');
+    $('#forgot-id').value = '';
+    $('#forgot-new').value = '';
+    $('#forgot-confirm').value = '';
+    $('#forgot-submit').disabled = false;
+    $('#forgot-submit').textContent = 'Reset Password';
+    $('#forgot-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    setTimeout(function () { $('#forgot-id').focus(); }, 60);
+  }
+
+  function closeForgotModal () {
+    $('#forgot-modal').classList.add('hidden');
+    document.body.style.overflow = '';
+  }
+
+  function setForgotRole (role) {
+    forgotRole = role;
+    $$('.forgot-tab').forEach(function (btn) {
+      btn.classList.toggle('tab-active', btn.getAttribute('data-role') === role);
+    });
+    if (role === 'signatory') {
+      $('#forgot-id-label').textContent = 'Institutional Email';
+      $('#forgot-id').placeholder = 'e.g. glen.tabucanon@tcc.edu.ph';
+      $('#forgot-id-hint').textContent = 'Use the TCC email of the signatory / admin account.';
+    } else {
+      $('#forgot-id-label').textContent = 'Institutional ID';
+      $('#forgot-id').placeholder = 'e.g. 2023-5548';
+      $('#forgot-id-hint').textContent = 'Student password resets count toward the 3-change limit.';
+    }
+  }
+
+  async function submitForgotPassword () {
+    var role = forgotRole;
+    var identifier = $('#forgot-id').value.trim();
+    var newPass    = $('#forgot-new').value;
+    var confirm    = $('#forgot-confirm').value;
+    var errEl      = $('#forgot-error');
+
+    errEl.classList.add('hidden');
+    if (!identifier) {
+      errEl.textContent = 'Please enter your ' + (role === 'signatory' ? 'institutional email.' : 'Student ID.');
+      errEl.classList.remove('hidden'); return;
+    }
+    if (!newPass)      { errEl.textContent = 'Please enter a new password.';      errEl.classList.remove('hidden'); return; }
+    if (newPass.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
+    if (newPass !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('hidden'); return; }
+
+    var btn = $('#forgot-submit');
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Resetting\u2026';
+    try {
+      var hash = window.bcrypt.hashSync(newPass, 10);
+      var resetCount = 0;
+      if (role === 'signatory') {
+        var acc = await DB.findSignatoryByEmail(identifier);
+        if (!acc) throw new Error('No signatory account found for that email.');
+        await DB.changeSignatoryPassword(acc.id, hash);
+        toast('Password reset successfully. Sign in with your new password.', 'success');
+      } else {
+        var st = await DB.findStudentByInstitutionalId(identifier);
+        if (!st) throw new Error('No student account found for that Student ID.');
+        var curCount = st.password_change_count || 0;
+        if (curCount >= PW_MAX) {
+          errEl.textContent = PW_WARNING;
+          errEl.classList.remove('hidden');
+          return;
+        }
+        resetCount = curCount + 1;
+        await DB.changeStudentPassword(st.id, hash, resetCount);
+        toast('Password reset successfully. Changes remaining: ' + (PW_MAX - resetCount) + ' of ' + PW_MAX + '.', 'success');
+      }
+      closeForgotModal();
+      setLoginTab(role === 'signatory' ? 'signatory' : 'student');
+      $('#login-id').value = identifier;
+      $('#login-password').value = newPass;
+    } catch (err) {
+      console.error(err);
+      errEl.textContent = ((err && err.message) || String(err));
+      errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+
   /* ===================== Student Help & FAQ modal ===================== */
   // Floating "Need Help? / FAQ" button (Student Portal only) opens an
   // accordion modal with common clearance questions + direct SAS contact.
@@ -1925,8 +2021,18 @@
       inp.type = inp.type === 'password' ? 'text' : 'password';
     });
 
-    $('#forgot-link').addEventListener('click', function () {
-      toast('Password reset link sent to your institutional email (demo).', 'info');
+    $('#forgot-link').addEventListener('click', openForgotModal);
+    $('#forgot-close').addEventListener('click', closeForgotModal);
+    $('#forgot-backdrop').addEventListener('click', closeForgotModal);
+    $$('.forgot-tab').forEach(function (btn) {
+      btn.addEventListener('click', function () { setForgotRole(btn.getAttribute('data-role')); });
+    });
+    $('#forgot-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitForgotPassword();
+    });
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && !$('#forgot-modal').classList.contains('hidden')) closeForgotModal();
     });
 
     // Demo buttons

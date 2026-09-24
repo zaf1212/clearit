@@ -619,6 +619,64 @@
     </div>
   </div>
 
+  <!-- ==================== FORGOT PASSWORD MODAL (LOGIN PAGE) ==================== -->
+  <div id="forgot-modal" class="hidden fixed inset-0 z-50">
+    <div id="forgot-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
+    <div class="relative min-h-full flex items-center justify-center p-4">
+      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+
+        <!-- Header -->
+        <div class="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-200">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-tcc-orange/10 text-tcc-orange flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800">Reset Password</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Recover access to your CLEARIT account</p>
+            </div>
+          </div>
+          <button id="forgot-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <form id="forgot-form" class="px-6 py-4 space-y-4" novalidate>
+          <!-- Account type -->
+          <div class="grid grid-cols-2 gap-1 bg-slate-100 rounded-xl p-1">
+            <button type="button" data-role="student" class="forgot-tab tab-active rounded-lg py-2 text-xs font-semibold transition">Student</button>
+            <button type="button" data-role="signatory" class="forgot-tab rounded-lg py-2 text-xs font-semibold transition">Signatory / Admin</button>
+          </div>
+
+          <div>
+            <label for="forgot-id" id="forgot-id-label" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Institutional ID</label>
+            <input id="forgot-id" type="text" autocomplete="username" placeholder="e.g. 2023-5548"
+              class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
+            <p id="forgot-id-hint" class="text-[11px] text-slate-400 mt-1.5">Student password resets count toward the 3-change limit.</p>
+          </div>
+
+          <div>
+            <label for="forgot-new" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">New Password</label>
+            <input id="forgot-new" type="password" autocomplete="new-password" placeholder="At least 8 characters"
+              class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
+          </div>
+
+          <div>
+            <label for="forgot-confirm" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Confirm New Password</label>
+            <input id="forgot-confirm" type="password" autocomplete="new-password" placeholder="Re-enter your new password"
+              class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
+          </div>
+
+          <p id="forgot-error" class="hidden text-xs text-red-600"></p>
+
+          <button id="forgot-submit" type="submit" class="w-full rounded-lg bg-tcc-orange py-2.5 text-sm font-bold text-white shadow-lg shadow-tcc-orange/25 hover:brightness-110 active:scale-[.99] transition">Reset Password</button>
+
+          <p class="text-[11px] leading-relaxed text-slate-400 text-center">Students get up to 3 password changes per account. If yours is blocked, visit the Student Affairs Services (SAS) Office for a manual reset.</p>
+        </form>
+      </div>
+    </div>
+  </div>
+
   <!-- ==================== SEMESTER CLEARANCE MANAGEMENT MODAL (SAS DIRECTOR ONLY) ==================== -->
   <div id="semester-mgmt-modal" class="hidden fixed inset-0 z-50">
     <div id="semester-mgmt-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
