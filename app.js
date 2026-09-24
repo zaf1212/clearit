@@ -1482,21 +1482,31 @@
     var p = progressOf(sigs);
     var allCleared = p.pct === 100;
 
-    // Verification payload: unique control number + QR data (student, term, date).
-    var completionDate = todayStr();
-    var qrPayload = encodeURIComponent(JSON.stringify({
-      student_id:      currentUser.iId,
-      semester:        currentUser.semester || '2nd Semester',
-      academic_year:   currentUser.academicYear || '2025-2026',
-      completion_date: completionDate
-    }));
-    var ctrlNumber = (function () {
-      var y = String(currentUser.academicYear || '2025-2026').split('-')[0];
-      var h = 0;
-      var seed = String(currentUser.iId) + '|' + (currentUser.semester || '2nd Semester') + '|' + (currentUser.academicYear || '2025-2026');
-      for (var i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 100000;
-      return 'CTRL-TCC-' + y + '-' + String(h).padStart(5, '0');
-    })();
+    // Verification payload: Control Number + formatted, human-readable
+    // OFFICIAL VERIFICATION message, URL-encoded for the QR API.
+    // Only built when the clearance is 100% complete across all requirements —
+    // pending/on-hold records never get an "OFFICIALLY CLEARED" QR payload.
+    var ctrlNumber, qrPayload;
+    if (allCleared) {
+      var stuName = currentUser.name || 'Student';
+      var stuId   = String(currentUser.iId || 'N/A').trim();
+      var sem     = currentUser.semester || '2nd Semester';
+      var ay      = currentUser.academicYear || '2025-2026';
+      var ctrl    = 'CTRL-TCC-' + stuId;
+      var verifyUrl = window.location.origin; // https://clearit-tcc.netlify.app in production
+
+      var qrText =
+        'OFFICIAL VERIFICATION \u2014 CLEARIT SYSTEM (Talisay City College)\n' +
+        'Student Name: ' + stuName + '\n' +
+        'Student ID: ' + stuId + '\n' +
+        'Status: OFFICIALLY CLEARED\n' +
+        'Term: ' + sem + ' - ' + ay + '\n' +
+        'Control No: ' + ctrl + '\n' +
+        'Verification URL: ' + verifyUrl;
+
+      ctrlNumber = ctrl;
+      qrPayload  = encodeURIComponent(qrText);
+    }
 
     // Official Digital Seal (circular SVG, double ring) — rendered only when
     // all 10 requirements are cleared.
