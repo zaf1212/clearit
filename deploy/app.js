@@ -2107,6 +2107,8 @@
     $('#blocks-modal').classList.remove('hidden');
     $('#blocks-error').classList.add('hidden');
     blocksSelected = {};
+    renderBlocksSectionsList();
+    rebuildSectionDatalist();
     loadBlocksStudents();
   }
 
@@ -2150,6 +2152,108 @@
     } finally {
       updateBlocksSelectedCount();
     }
+  }
+
+  /* ------ Section / Block suggestions: create & manage quick-pick list ------ */
+
+  var BLOCKS_DEFAULT_SECTIONS = [
+    'BSIT 1-A', 'BSIT 1-B', 'BSCS 2-A', 'BSCS 2-B',
+    'BSIT 3-A', 'BSIT 3-B', 'BSIT 4-A'
+  ];
+  var BLOCKS_SECTIONS_KEY = 'clearit-sections';
+
+  function escapeHtml (s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  function isDefaultBlockSection (s) {
+    return BLOCKS_DEFAULT_SECTIONS.map(function (d) { return d.toLowerCase(); }).indexOf(String(s).toLowerCase()) !== -1;
+  }
+
+  function getBlocksSections () {
+    var saved = [];
+    try {
+      var raw = JSON.parse(localStorage.getItem(BLOCKS_SECTIONS_KEY) || '[]');
+      if (Array.isArray(raw)) {
+        saved = raw.filter(function (s) { return typeof s === 'string' && s.trim(); }).map(function (s) { return s.trim(); });
+      }
+    } catch (e) { saved = []; }
+    var seen = {}, out = [];
+    BLOCKS_DEFAULT_SECTIONS.concat(saved).forEach(function (s) {
+      var key = s.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(s);
+    });
+    return out;
+  }
+
+  function saveBlocksSections (sections) {
+    var custom = sections.filter(function (s) { return !isDefaultBlockSection(s); });
+    try { localStorage.setItem(BLOCKS_SECTIONS_KEY, JSON.stringify(custom)); }
+    catch (e) { /* storage unavailable: suggestions stay session-only */ }
+  }
+
+  function rebuildSectionDatalist () {
+    var dl = $('#section-options');
+    if (!dl) return;
+    dl.innerHTML = '';
+    getBlocksSections().forEach(function (s) {
+      var o = document.createElement('option');
+      o.value = s;
+      dl.appendChild(o);
+    });
+  }
+
+  function renderBlocksSectionsList () {
+    var wrap = $('#blocks-sections-list');
+    var sections = getBlocksSections();
+    if (!sections.length) {
+      wrap.innerHTML = '<p class="text-xs text-slate-400 italic">No sections yet &mdash; add one above.</p>';
+      return;
+    }
+    wrap.innerHTML = sections.map(function (s) {
+      var btn;
+      if (isDefaultBlockSection(s)) {
+        btn = '<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 pl-3 pr-2.5 py-1 text-xs font-semibold ring-1 ring-inset ring-slate-200">' +
+          escapeHtml(s) + '<span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">default</span></span>';
+      } else {
+        btn = '<button type="button" data-blocks-remove-section="' + escapeHtml(s) + '" title="Remove suggestion" class="inline-flex items-center gap-1 rounded-full bg-navy-50 text-navy-700 pl-3 pr-1.5 py-1 text-xs font-semibold ring-1 ring-inset ring-navy-100 hover:bg-navy-100 transition">' +
+          escapeHtml(s) +
+          '<svg class="w-3 h-3 text-navy-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>';
+      }
+      return btn;
+    }).join('');
+  }
+
+  function addBlocksSection () {
+    if (!isSASDirector()) return;
+    var input = $('#blocks-new-section');
+    var name = input.value.trim();
+    if (!name) { toast('Type a section or block name first.', 'error'); return; }
+    var existing = getBlocksSections().map(function (s) { return s.toLowerCase(); });
+    if (existing.indexOf(name.toLowerCase()) !== -1) { toast('That section already exists.', 'error'); return; }
+    var sections = getBlocksSections();
+    sections.push(name);
+    saveBlocksSections(sections);
+    $('#blocks-assign-section').value = name;   // next assign target, ready to go
+    input.value = '';
+    renderBlocksSectionsList();
+    rebuildSectionDatalist();
+    toast('Added "' + name + '" to the section list.', 'success');
+    input.focus();
+  }
+
+  function handleBlocksSectionsClick (ev) {
+    var btn = ev.target.closest('[data-blocks-remove-section]');
+    if (!btn || !isSASDirector()) return;
+    var name = btn.getAttribute('data-blocks-remove-section');
+    var sections = getBlocksSections().filter(function (s) { return s !== name; });
+    saveBlocksSections(sections);
+    if ($('#blocks-assign-section').value === name) $('#blocks-assign-section').value = '';
+    renderBlocksSectionsList();
+    rebuildSectionDatalist();
+    toast('Removed "' + name + '" from the section list.', 'success');
   }
 
   /* ===================== Events ===================== */
@@ -2488,6 +2592,11 @@
       syncBlocksCheckAll();
     });
     $('#blocks-apply-btn').addEventListener('click', applyBlocksAssignment);
+    $('#blocks-add-section').addEventListener('click', addBlocksSection);
+    $('#blocks-new-section').addEventListener('keydown', function (ev) {
+      if (ev.key === 'Enter') { ev.preventDefault(); addBlocksSection(); }
+    });
+    $('#blocks-sections-list').addEventListener('click', handleBlocksSectionsClick);
 
     // Admin student management modal
     $('#sa-manage-students').addEventListener('click', openAdminModal);

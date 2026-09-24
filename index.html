@@ -934,6 +934,31 @@
             <p class="text-[11px] text-amber-700/80 mt-2.5">Leave a field blank to keep each student's current value.</p>
           </div>
 
+          <!-- Create new section / block suggestions -->
+          <div class="rounded-2xl border border-slate-200 p-4 space-y-3">
+            <div class="flex items-start gap-2.5">
+              <span class="w-7 h-7 shrink-0 rounded-lg bg-navy-50 text-navy-700 flex items-center justify-center">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
+              </span>
+              <div>
+                <h4 class="font-bold text-slate-800">Create New Section / Block</h4>
+                <p class="text-[11px] text-slate-500 leading-relaxed">
+                  Add a quick-pick suggestion for the Section / Block fields. This only adds it to the list
+                  above — assigning students is still done with <b>Assign Selected Students To</b>.
+                </p>
+              </div>
+            </div>
+            <div class="flex gap-2">
+              <input id="blocks-new-section" type="text" placeholder="e.g. BSCS 4-A" maxlength="40"
+                class="flex-1 min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+              <button id="blocks-add-section" data-orig-text="Add Section"
+                class="rounded-lg bg-navy-700 px-4 py-2 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition whitespace-nowrap">
+                Add Section
+              </button>
+            </div>
+            <div id="blocks-sections-list" class="flex flex-wrap gap-2"></div>
+          </div>
+
           <!-- Student list -->
           <div class="rounded-xl border border-slate-200 overflow-hidden">
             <table class="w-full text-sm">
