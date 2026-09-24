@@ -51,7 +51,7 @@
     studentOrg:      'fritzie.formis@tcc.edu.ph',
     studentAffairs:  'jennilyn.geagonia@tcc.edu.ph',
     registrar:       'wendelyn.labajo@tcc.edu.ph',
-    dean:            'glen.tabucanan@tcc.edu.ph',
+    dean:            'glen.tabucanon@tcc.edu.ph',
     president:       'richel.bacaltos@tcc.edu.ph'
   };
 
@@ -365,7 +365,7 @@
     $('#signatory-role-field').classList.toggle('hidden', tab !== 'signatory');
     if (tab === 'signatory') {
       $('#login-id-label').textContent = 'Institutional Email';
-      $('#login-id').placeholder = 'e.g. glen.tabucanan@tcc.edu.ph';
+      $('#login-id').placeholder = 'e.g. glen.tabucanon@tcc.edu.ph';
     } else {
       $('#login-id-label').textContent = 'Institutional ID';
       $('#login-id').placeholder = 'e.g. 2023-5548';
@@ -414,7 +414,7 @@
       } else {
         var res2 = await DB.loginSignatory(id, pass);
         if (!res2 || !res2.ok) {
-          showLoginError((res2 && res2.error) || 'Invalid email or password. Try glen.tabucanan@tcc.edu.ph / admin123.');
+          showLoginError((res2 && res2.error) || 'Invalid email or password. Try glen.tabucanon@tcc.edu.ph / admin123.');
           return;
         }
         currentUser = {
@@ -1930,9 +1930,9 @@
     $('#demo-signatory-btn').addEventListener('click', function () {
       setLoginTab('signatory');
       $('#signatory-role').value = 'dean';
-      $('#login-id').value = 'glen.tabucanan@tcc.edu.ph';
+      $('#login-id').value = 'glen.tabucanon@tcc.edu.ph';
       $('#login-password').value = 'admin123';
-      attemptLogin('signatory', 'glen.tabucanan@tcc.edu.ph', 'admin123', 'dean');
+      attemptLogin('signatory', 'glen.tabucanon@tcc.edu.ph', 'admin123', 'dean');
     });
 
     $('#demo-sas-btn').addEventListener('click', function () {

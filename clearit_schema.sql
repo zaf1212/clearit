@@ -316,7 +316,7 @@ INSERT INTO signatory_categories (id, key, name, signatory_name, display_order) 
   ('a0000000-0000-0000-0000-000000000006','studentOrg',       'Student Organization Coordinator',     'Ms. Fritzie D. Formis',                    6),
   ('a0000000-0000-0000-0000-000000000007','studentAffairs',   'Student Affairs Services Director',    'Mrs. Jennilyn D. Geagonia / Engr. Raymond Geagonia', 7),
   ('a0000000-0000-0000-0000-000000000008','registrar',        'College Registrar',                    'Mrs. Wendelyn Labajo',                     8),
-  ('a0000000-0000-0000-0000-000000000009','dean',             'Program Dean',                         'Glen Tabucanan',                           9),
+  ('a0000000-0000-0000-0000-000000000009','dean',             'Program Dean',                         'Glen L Tabucanon',                         9),
   ('a0000000-0000-0000-0000-000000000010','president',        'College President (Final Approval)',    'Richel N. Bacaltos, Ed.D.',               10);
 
 -- 6b. Students
@@ -337,7 +337,7 @@ INSERT INTO signatories (id, email, password_hash, full_name, role, category_id)
   ('c0000000-0000-0000-0000-000000000006','fritzie.formis@tcc.edu.ph',       crypt('admin123',gen_salt('bf')),'Ms. Fritzie D. Formis',                     'signatory',   'a0000000-0000-0000-0000-000000000006'),
   ('c0000000-0000-0000-0000-000000000007','jennilyn.geagonia@tcc.edu.ph',    crypt('admin123',gen_salt('bf')),'Mrs. Jennilyn D. Geagonia',                  'sas_director', 'a0000000-0000-0000-0000-000000000007'),
   ('c0000000-0000-0000-0000-000000000008','wendelyn.labajo@tcc.edu.ph',      crypt('admin123',gen_salt('bf')),'Mrs. Wendelyn Labajo',                      'signatory',   'a0000000-0000-0000-0000-000000000008'),
-  ('c0000000-0000-0000-0000-000000000009','glen.tabucanan@tcc.edu.ph', crypt('admin123',gen_salt('bf')),'Glen Tabucanan',                            'signatory',   'a0000000-0000-0000-0000-000000000009'),
+  ('c0000000-0000-0000-0000-000000000009','glen.tabucanon@tcc.edu.ph', crypt('admin123',gen_salt('bf')),'Glen L Tabucanon',                         'signatory',   'a0000000-0000-0000-0000-000000000009'),
   ('c0000000-0000-0000-0000-000000000010','richel.bacaltos@tcc.edu.ph',      crypt('admin123',gen_salt('bf')),'Richel N. Bacaltos, Ed.D.',                 'signatory',   'a0000000-0000-0000-0000-000000000010');
 
 -- 6c2. Semesters — the current active semester seeds the default login view
