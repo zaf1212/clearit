@@ -641,6 +641,7 @@
           </button>
         </div>
 
+        <!-- Step 1: request a verification link (no password fields here) -->
         <form id="forgot-form" class="px-6 py-4 space-y-4" novalidate>
           <!-- Account type -->
           <div class="grid grid-cols-2 gap-1 bg-slate-100 rounded-xl p-1">
@@ -648,31 +649,45 @@
             <button type="button" data-role="signatory" class="forgot-tab rounded-lg py-2 text-xs font-semibold transition">Signatory / Admin</button>
           </div>
 
-          <div>
+          <!-- Student: identify the account only — the password is set later via the emailed link -->
+          <div id="forgot-student-fields">
             <label for="forgot-id" id="forgot-id-label" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Institutional ID</label>
             <input id="forgot-id" type="text" autocomplete="username" placeholder="e.g. 2023-5548"
               class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
-            <p id="forgot-id-hint" class="text-[11px] text-slate-400 mt-1.5">Student password resets count toward the 3-change limit.</p>
+            <p id="forgot-id-hint" class="text-[11px] text-slate-400 mt-1.5">Enter your Student ID (or TCC email). A verification code / link will be sent to your official TCC email address.</p>
           </div>
 
-          <div>
-            <label for="forgot-new" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">New Password</label>
-            <input id="forgot-new" type="password" autocomplete="new-password" placeholder="At least 8 characters"
-              class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
-          </div>
-
-          <div>
-            <label for="forgot-confirm" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Confirm New Password</label>
-            <input id="forgot-confirm" type="password" autocomplete="new-password" placeholder="Re-enter your new password"
-              class="w-full rounded-lg border border-slate-300 bg-slate-50 py-2.5 px-3 text-sm focus:border-tcc-orange focus:ring-2 focus:ring-tcc-orange/20 focus:bg-white focus:outline-none" />
+          <!-- Signatory / Admin: self-service reset is intentionally blocked -->
+          <div id="forgot-signatory-block" class="hidden">
+            <div class="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p class="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-amber-700 mb-1.5">
+                <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M5.07 19h13.86a2 2 0 001.74-3L13.74 4a2 2 0 00-3.48 0L3.34 16a2 2 0 001.73 3z"/></svg>
+                Reset restricted
+              </p>
+              <p class="text-xs leading-relaxed text-amber-800">Signatory password resets must be requested directly through the System Administrator or SAS Director for security verification.</p>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-1.5"><span class="font-medium">SAS Director:</span> <a href="mailto:jennilyn.geagonia@tcc.edu.ph" class="text-navy-700 font-semibold hover:underline">jennilyn.geagonia@tcc.edu.ph</a></p>
           </div>
 
           <p id="forgot-error" class="hidden text-xs text-red-600"></p>
 
-          <button id="forgot-submit" type="submit" class="w-full rounded-lg bg-tcc-orange py-2.5 text-sm font-bold text-white shadow-lg shadow-tcc-orange/25 hover:brightness-110 active:scale-[.99] transition">Reset Password</button>
+          <button id="forgot-submit" type="submit" class="w-full rounded-lg bg-tcc-orange py-2.5 text-sm font-bold text-white shadow-lg shadow-tcc-orange/25 hover:brightness-110 active:scale-[.99] transition">Send Verification Code</button>
 
-          <p class="text-[11px] leading-relaxed text-slate-400 text-center">Students get up to 3 password changes per account. If yours is blocked, visit the Student Affairs Services (SAS) Office for a manual reset.</p>
+          <p class="text-[11px] leading-relaxed text-slate-400 text-center">For your security, your password can only be set through the emailed verification link &mdash; never directly from this page.</p>
         </form>
+
+        <!-- Step 2: confirmation view -->
+        <div id="forgot-confirmation" class="hidden px-6 py-8 text-center">
+          <div class="w-14 h-14 mx-auto rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mb-4">
+            <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          </div>
+          <h4 class="font-bold text-slate-800">Check your TCC email</h4>
+          <p class="text-xs sm:text-sm text-slate-600 leading-relaxed mt-2">A security code / link has been sent to your official TCC email. Please check your inbox to reset your password.</p>
+          <div class="flex gap-3 mt-6">
+            <button id="forgot-resend" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Resend Link</button>
+            <button id="forgot-done" type="button" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Back to Login</button>
+          </div>
+        </div>
       </div>
     </div>
   </div>

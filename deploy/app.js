@@ -1702,22 +1702,19 @@
   }
 
   /* ===================== Forgot Password (login page) ===================== */
-  // Real recovery flow for a static site with no email backend: pick the
-  // account type (Student / Signatory), enter the Student ID or email, and
-  // set a fresh password immediately. Student resets consume the 3-change
-  // allowance; blocked students are directed to the SAS Office.
+  // Secure recovery: the public login page never writes new passwords.
+  // Students identify their account and receive a Supabase email recovery
+  // link/code (supabase.auth.resetPasswordForEmail); signatory/admin resets
+  // are intentionally restricted to the SAS Director / System Administrator.
 
   function openForgotModal () {
     setForgotRole(currentLoginTab === 'signatory' ? 'signatory' : 'student');
+    showForgotForm();
     $('#forgot-error').classList.add('hidden');
     $('#forgot-id').value = '';
-    $('#forgot-new').value = '';
-    $('#forgot-confirm').value = '';
-    $('#forgot-submit').disabled = false;
-    $('#forgot-submit').textContent = 'Reset Password';
     $('#forgot-modal').classList.remove('hidden');
     document.body.style.overflow = 'hidden';
-    setTimeout(function () { $('#forgot-id').focus(); }, 60);
+    setTimeout(function () { if (forgotRole === 'student') $('#forgot-id').focus(); }, 60);
   }
 
   function closeForgotModal () {
@@ -1725,71 +1722,95 @@
     document.body.style.overflow = '';
   }
 
+  function showForgotForm () {
+    $('#forgot-form').classList.remove('hidden');
+    $('#forgot-confirmation').classList.add('hidden');
+  }
+
+  function showForgotConfirmation () {
+    $('#forgot-form').classList.add('hidden');
+    $('#forgot-confirmation').classList.remove('hidden');
+  }
+
   function setForgotRole (role) {
     forgotRole = role;
     $$('.forgot-tab').forEach(function (btn) {
       btn.classList.toggle('tab-active', btn.getAttribute('data-role') === role);
     });
+    $('#forgot-error').classList.add('hidden');
     if (role === 'signatory') {
-      $('#forgot-id-label').textContent = 'Institutional Email';
-      $('#forgot-id').placeholder = 'e.g. glen.tabucanon@tcc.edu.ph';
-      $('#forgot-id-hint').textContent = 'Use the TCC email of the signatory / admin account.';
+      // Signatory / Admin: self-service reset blocked — show the restriction only.
+      $('#forgot-student-fields').classList.add('hidden');
+      $('#forgot-signatory-block').classList.remove('hidden');
+      $('#forgot-submit').disabled = true;
     } else {
+      $('#forgot-student-fields').classList.remove('hidden');
+      $('#forgot-signatory-block').classList.add('hidden');
+      $('#forgot-submit').disabled = false;
       $('#forgot-id-label').textContent = 'Institutional ID';
       $('#forgot-id').placeholder = 'e.g. 2023-5548';
-      $('#forgot-id-hint').textContent = 'Student password resets count toward the 3-change limit.';
+      $('#forgot-id-hint').textContent = 'Enter your Student ID (or TCC email). A verification code / link will be sent to your official TCC email address.';
     }
   }
 
-  async function submitForgotPassword () {
-    var role = forgotRole;
+  // Latest recovery target so "Resend Link" re-triggers the same email.
+  var lastForgotEmail = null;
+
+  async function submitForgotRequest () {
+    if (forgotRole !== 'student') return; // signatory self-reset is blocked in the UI
     var identifier = $('#forgot-id').value.trim();
-    var newPass    = $('#forgot-new').value;
-    var confirm    = $('#forgot-confirm').value;
     var errEl      = $('#forgot-error');
 
     errEl.classList.add('hidden');
     if (!identifier) {
-      errEl.textContent = 'Please enter your ' + (role === 'signatory' ? 'institutional email.' : 'Student ID.');
-      errEl.classList.remove('hidden'); return;
+      errEl.textContent = 'Please enter your Student ID or institutional email.';
+      errEl.classList.remove('hidden');
+      return;
     }
-    if (!newPass)      { errEl.textContent = 'Please enter a new password.';      errEl.classList.remove('hidden'); return; }
-    if (newPass.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
-    if (newPass !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('hidden'); return; }
 
     var btn = $('#forgot-submit');
     var orig = btn.textContent;
     btn.disabled = true;
-    btn.textContent = 'Resetting\u2026';
+    btn.textContent = 'Sending\u2026';
     try {
-      var hash = window.bcrypt.hashSync(newPass, 10);
-      var resetCount = 0;
-      if (role === 'signatory') {
-        var acc = await DB.findSignatoryByEmail(identifier);
-        if (!acc) throw new Error('No signatory account found for that email.');
-        await DB.changeSignatoryPassword(acc.id, hash);
-        toast('Password reset successfully. Sign in with your new password.', 'success');
-      } else {
+      // Resolve the official TCC email: accept a direct email, or map a
+      // Student ID to the email on file.
+      var email = identifier.indexOf('@') !== -1 ? identifier : null;
+      if (!email) {
         var st = await DB.findStudentByInstitutionalId(identifier);
-        if (!st) throw new Error('No student account found for that Student ID.');
-        var curCount = st.password_change_count || 0;
-        if (curCount >= PW_MAX) {
-          errEl.textContent = PW_WARNING;
-          errEl.classList.remove('hidden');
-          return;
-        }
-        resetCount = curCount + 1;
-        await DB.changeStudentPassword(st.id, hash, resetCount);
-        toast('Password reset successfully. Changes remaining: ' + (PW_MAX - resetCount) + ' of ' + PW_MAX + '.', 'success');
+        if (st && st.email) email = st.email;
       }
-      closeForgotModal();
-      setLoginTab(role === 'signatory' ? 'signatory' : 'student');
-      $('#login-id').value = identifier;
-      $('#login-password').value = newPass;
+      if (email) {
+        lastForgotEmail = email;
+        await DB.sendPasswordResetEmail(email);
+      } else {
+        lastForgotEmail = null;
+      }
+      // Always show the confirmation view — the page never reveals whether
+      // the account exists (prevents ID / email enumeration).
+      showForgotConfirmation();
     } catch (err) {
       console.error(err);
       errEl.textContent = ((err && err.message) || String(err));
       errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  }
+
+  async function resendForgotRequest () {
+    if (!lastForgotEmail) { showForgotForm(); return; }
+    var btn = $('#forgot-resend');
+    var orig = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Sending\u2026';
+    try {
+      await DB.sendPasswordResetEmail(lastForgotEmail);
+      toast('A new verification link has been sent to your TCC email.', 'success');
+    } catch (err) {
+      console.error(err);
+      toast(((err && err.message) || String(err)), 'error');
     } finally {
       btn.disabled = false;
       btn.textContent = orig;
@@ -2029,8 +2050,10 @@
     });
     $('#forgot-form').addEventListener('submit', function (e) {
       e.preventDefault();
-      submitForgotPassword();
+      submitForgotRequest();
     });
+    $('#forgot-resend').addEventListener('click', resendForgotRequest);
+    $('#forgot-done').addEventListener('click', closeForgotModal);
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape' && !$('#forgot-modal').classList.contains('hidden')) closeForgotModal();
     });

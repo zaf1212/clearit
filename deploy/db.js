@@ -262,9 +262,8 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not change the password');
   }
 
-  // ── Forgot Password (login page): account lookup by identifier ──────────
-  // No password verification — used only to confirm an account exists before
-  // writing a fresh hash. Returns the stable UUID + display info.
+  // ── Forgot Password: resolve a Student ID to its official TCC email ─────
+  // Read-only lookup used by the login page to address the recovery email.
   async function findStudentByInstitutionalId (institutionalId) {
     var { data, error } = await window.supabase
       .from('students')
@@ -275,14 +274,16 @@ var DB = (function () {
     return data || null;
   }
 
-  async function findSignatoryByEmail (email) {
-    var { data, error } = await window.supabase
-      .from('signatories')
-      .select('id, full_name, email, role')
-      .eq('email', email)
-      .maybeSingle();
-    if (error) throw friendlyError(error, 'Could not verify the signatory account');
-    return data || null;
+  // ── Forgot Password: send a Supabase (GoTrue) email recovery link ───────
+  // Delegates to supabase.auth.resetPasswordForEmail so the reset is verified
+  // by an emailed link/code. Nothing is written to the students/signatories
+  // tables from the public login page — no direct password row overwrite.
+  async function sendPasswordResetEmail (email) {
+    var { error } = await window.supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: window.location.origin
+    });
+    if (error) throw friendlyError(error, 'Could not send the password reset email');
+    return true;
   }
 
   // ── Admin (SAS Director): reset a student's change counter back to 0 ───
@@ -535,7 +536,7 @@ var DB = (function () {
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,
     findStudentByInstitutionalId: findStudentByInstitutionalId,
-    findSignatoryByEmail: findSignatoryByEmail,
+    sendPasswordResetEmail: sendPasswordResetEmail,
     resetPasswordChangeCount: resetPasswordChangeCount,
     initializeClearance:    initializeClearance,
     approveClearance:       approveClearance,
