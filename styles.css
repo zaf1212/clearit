@@ -258,6 +258,8 @@ body.dark-theme {
 .dark-theme input::placeholder { color: #64748b; }
 
 /* Tables: dark slate headers + alternating rows */
+.dark-theme thead tr.text-slate-500,
+.dark-theme thead tr.text-slate-600,
 .dark-theme thead tr,
 .dark-theme thead th {
   background-color: #1e293b;
