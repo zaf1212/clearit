@@ -1567,7 +1567,9 @@
       var sem     = currentUser.semester || '2nd Semester';
       var ay      = currentUser.academicYear || '2025-2026';
       var ctrl    = 'CTRL-TCC-' + stuId;
-      var verifyUrl = window.location.origin; // https://clearit-tcc.netlify.app in production
+      // Verification link must resolve to "this site" regardless of host or
+      // sub-path (Netlify root vs GitHub Pages /clearit/).
+      var verifyUrl = window.location.origin + window.location.pathname + window.location.hash;
 
       var qrText =
         'OFFICIAL VERIFICATION \u2014 CLEARIT SYSTEM (Talisay City College)\n' +
