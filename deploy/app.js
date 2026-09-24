@@ -126,12 +126,12 @@
   /* ===================== Semester helpers ===================== */
 
   function semesterLabel(sem, ay) {
-    return sem + ' (' + ay + ')';
+    return sem + ' - SY ' + ay;
   }
 
-  // Compact "2nd Semester 2025-2026" label used in prerequisite messages.
+  // Compact "2nd Semester SY 2025-2026" label used in prerequisite messages.
   function termLabel(sem, ay) {
-    return sem + ' ' + ay;
+    return sem + ' - SY ' + ay;
   }
 
   // The term that comes immediately BEFORE the given one.
@@ -1500,7 +1500,7 @@
         'Student Name: ' + stuName + '\n' +
         'Student ID: ' + stuId + '\n' +
         'Status: OFFICIALLY CLEARED\n' +
-        'Term: ' + sem + ' - ' + ay + '\n' +
+        'Term: ' + sem + ' - SY ' + ay + '\n' +
         'Control No: ' + ctrl + '\n' +
         'Verification URL: ' + verifyUrl;
 
@@ -1610,7 +1610,7 @@
       '<div><b>Program</b>' + currentUser.program + '</div>' +
       '<div><b>Year &amp; Section</b>' + currentUser.block + '</div>' +
       '<div><b>Semester</b>' + (currentUser.semester || '2nd Semester') + '</div>' +
-      '<div><b>Academic Year</b>' + (currentUser.academicYear || '2025-2026') + '</div>' +
+      '<div><b>Academic Year</b>SY ' + (currentUser.academicYear || '2025-2026') + '</div>' +
       '<div><b>Status</b>' + (currentUser.enrollmentStatus || 'Regular') + '</div>' +
       '</div>' +
       '<table><tr><th>Signatory</th><th style="text-align:center">Signature</th><th style="text-align:center">Status</th><th style="text-align:center">Date Signed</th></tr>' + htmlRows + '</table>' +
