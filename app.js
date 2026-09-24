@@ -68,6 +68,39 @@
   var forgotRole       = 'student'; // role selected inside the Forgot Password modal
   var remarkTarget     = null;
 
+  /* ===================== Dark / Light theme ===================== */
+  // Global theme toggle for both portals, persisted in localStorage so the
+  // chosen theme survives refreshes and logins. initTheme() runs immediately
+  // (script loads at the end of <body>) to avoid a flash of the light theme.
+
+  function applyTheme (isDark) {
+    if (isDark) {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+    try {
+      if (isDark) localStorage.setItem('theme', 'dark');
+      else localStorage.removeItem('theme');
+    } catch (e) { /* storage unavailable — theme still applies this session */ }
+  }
+
+  function toggleTheme () {
+    applyTheme(!document.body.classList.contains('dark-theme'));
+  }
+
+  function initTheme () {
+    var saved = null;
+    try { saved = localStorage.getItem('theme'); } catch (e) { saved = null; }
+    if (saved === 'dark') {
+      document.body.classList.add('dark-theme');
+    } else {
+      document.body.classList.remove('dark-theme');
+    }
+  }
+
+  initTheme();
+
   var studentClearanceRows = [];
   var allStudentRows       = [];
   var adminStudentList     = [];  // all students for admin panel
@@ -2091,6 +2124,10 @@
         $('#login-id').focus();
       }
     });
+
+    // Theme toggle (dark / light) across both portals
+    $('#sv-theme-toggle').addEventListener('click', toggleTheme);
+    $('#sa-theme-toggle').addEventListener('click', toggleTheme);
 
     // Logout & refresh
     $('#sv-logout').addEventListener('click', logout);
