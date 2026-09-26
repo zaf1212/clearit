@@ -300,6 +300,34 @@ body.dark-theme {
   -webkit-text-fill-color: #f8fafc;
   caret-color: #f8fafc;
 }
+/* ---- Focus state --------------------------------------------------------
+   Form controls carry Tailwind focus utilities, and one of them beats the
+   dark-mode override above:
+
+     .focus\:bg-white:focus   -> (0,2,0)  background-color: #fff
+     .dark-theme input        -> (0,1,1)  background-color: #1e293b
+
+   Two classes outrank one class + one element, so clicking into a field
+   flipped its background to white while -webkit-text-fill-color stayed
+   #f8fafc - near-white text on a white box, i.e. invisible typed text. This
+   re-asserts the dark fill at (0,2,1), which outranks both.
+
+   The ring is the other half: the controls ship with ring-navy-700/20 and
+   border-navy-700, which are dark navy on a dark panel and therefore invisible.
+   A sky-blue ring is used instead so keyboard focus is actually visible.
+   Declared before the autofill block so the autofill fill still wins on
+   autofilled+focused fields (see the refinement after it). */
+.dark-theme input:focus,
+.dark-theme select:focus,
+.dark-theme textarea:focus {
+  background-color: #1e293b;
+  color: #ffffff;
+  -webkit-text-fill-color: #ffffff;
+  caret-color: #ffffff;
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25);
+}
+
 .dark-theme input::placeholder,
 .dark-theme textarea::placeholder {
   color: #64748b;
@@ -336,6 +364,13 @@ body.dark-theme {
   box-shadow: 0 0 0 1000px #1e293b inset;
   /* keeps the transition from re-letting the UA fill bleed back in */
   transition: background-color 600000s 0s, color 600000s 0s;
+}
+/* An autofilled field that is then focused would otherwise get the plain focus
+   ring, whose box-shadow has no inset fill - letting the browser's light
+   autofill chip show through again. Re-state the ring *and* the fill together. */
+.dark-theme input:-webkit-autofill:focus {
+  border-color: #38bdf8;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.25), 0 0 0 1000px #1e293b inset;
 }
 /* Same protection for the "Remember me" / "Select all" checkboxes. */
 .dark-theme input[type="checkbox"] {
