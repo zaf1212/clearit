@@ -1258,8 +1258,10 @@
               </div>
               <div>
                 <label for="admin-edit-program" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Program</label>
-                <input id="admin-edit-program" type="text"
-                  class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+                <select id="admin-edit-program" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none">
+                  <!-- Populated per student in openAdminEdit(), so a legacy
+                       program already on the record is preserved as an option. -->
+                </select>
               </div>
               <div>
                 <label for="admin-edit-semester" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Semester</label>
@@ -1341,10 +1343,8 @@
               <div>
                 <label for="reg-program" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Program / Course</label>
                 <select id="reg-program" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
-                  <option value="BSINDTECH-COMPTECH">BSINDTECH-COMPTECH</option>
-                  <option value="BSIT">BSIT</option>
-                  <option value="BSINDTECH">BSINDTECH</option>
-                  <option value="ACT">ACT (Associate in Computer Technology)</option>
+                  <!-- Options are built from PROGRAM_GROUPS in app.js, which is the
+                       single source of truth shared with the Admin edit form. -->
                 </select>
               </div>
               <div>

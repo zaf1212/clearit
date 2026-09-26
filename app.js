@@ -152,6 +152,98 @@
   // students are enrolled when a new term is initialized.
   var ACADEMIC_STATUSES = ['Active', 'Dropped', 'Suspended', 'Graduated', 'Inactive'];
 
+  /* ------ Official TCC academic programs ------
+   * Single source of truth for the Program/Course field. The Register form and
+   * the Admin edit form are both built from this list at runtime, so the two
+   * cannot drift apart - which is exactly how the old hardcoded <option> blocks
+   * diverged. `code` is what gets stored; `name` is display only. */
+  var PROGRAM_GROUPS = [
+    { college: 'College of Teacher Education', programs: [
+      { code: 'BEEd',      name: 'Bachelor of Elementary Education' },
+      { code: 'BSEd-ENG',  name: 'BSEd Major in English' },
+      { code: 'BSEd-FIL',  name: 'BSEd Major in Filipino' },
+      { code: 'BSEd-MATH', name: 'BSEd Major in Mathematics' },
+      { code: 'BSEd-SOC',  name: 'BSEd Major in Social Studies' }
+    ]},
+    { college: 'College of Industrial Technology', programs: [
+      { code: 'BSInTech-CT', name: 'BSInTech Major in Computer Technology' },
+      { code: 'BSInTech-ET', name: 'BSInTech Major in Electronics Technology' }
+    ]},
+    { college: 'College of Hospitality & Business Management', programs: [
+      { code: 'BSHM', name: 'Bachelor of Science in Hospitality Management' },
+      { code: 'BSBA', name: 'Bachelor of Science in Business Administration' }
+    ]},
+    { college: 'Post-Baccalaureate', programs: [
+      { code: 'DPE', name: 'Diploma in Professional Education' }
+    ]}
+  ];
+
+  var PROGRAM_CODES = PROGRAM_GROUPS.reduce(function (acc, group) {
+    return acc.concat(group.programs.map(function (p) { return p.code; }));
+  }, []);
+
+  // "BSEd-ENG - BSEd Major in English" for an official code, or null if unknown.
+  function programLabel (code) {
+    for (var i = 0; i < PROGRAM_GROUPS.length; i++) {
+      var list = PROGRAM_GROUPS[i].programs;
+      for (var j = 0; j < list.length; j++) {
+        if (list[j].code === code) return list[j].code + ' - ' + list[j].name;
+      }
+    }
+    return null;
+  }
+
+  // Renders a stored program for display: the full official label when we
+  // recognise it, otherwise the raw stored value, so pre-existing records that
+  // predate the official list still show something meaningful.
+  function displayProgram (code) {
+    if (!code) return '';
+    return programLabel(code) || code;
+  }
+
+  /* Fills a <select> with the official programs, grouped by college, and
+   * selects `current`.
+   * `current` is the value already on the record. If it is NOT official (older
+   * records store things like "BSIT" or "BSINDTECH-COMPTECH") it is added as a
+   * leading legacy option, because assigning .value to a <select> with no
+   * matching <option> silently yields '' - which would blank the program on any
+   * unrelated edit such as changing a section. Selecting here rather than at
+   * each call site keeps that guarantee in one place. */
+  function fillProgramSelect (sel, current) {
+    if (!sel) return;
+    sel.innerHTML = '';
+
+    // Always offer an explicit empty choice. Without a matching <option
+    // value=""> the browser shows the first option while .value is '', which
+    // looks like a selection but stores nothing.
+    var blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = current ? '— Unset —' : '— Select program —';
+    sel.appendChild(blank);
+
+    if (current && PROGRAM_CODES.indexOf(current) === -1) {
+      var legacy = document.createElement('option');
+      legacy.value = current;
+      legacy.textContent = current + ' (previous entry - not an official program)';
+      sel.appendChild(legacy);
+    }
+
+    PROGRAM_GROUPS.forEach(function (group) {
+      var og = document.createElement('optgroup');
+      og.label = group.college;
+      group.programs.forEach(function (p) {
+        var opt = document.createElement('option');
+        opt.value = p.code;
+        opt.textContent = p.code + ' - ' + p.name;
+        og.appendChild(opt);
+      });
+      sel.appendChild(og);
+    });
+
+    // Must come after the options exist, otherwise .value silently becomes ''.
+    sel.value = current || '';
+  }
+
   var STATUS_CHIP_CLASS = {
     'Active':    'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200',
     'Dropped':   'bg-red-100 text-red-700 ring-1 ring-inset ring-red-200',
@@ -708,7 +800,7 @@
     $('#sd-name').textContent      = name;
     $('#sd-id').textContent        = currentUser.iId;
     $('#sd-block').textContent     = currentUser.block;
-    $('#sd-program').textContent   = currentUser.program;
+    $('#sd-program').textContent   = displayProgram(currentUser.program);
 
     // Term chips mirror the selected semester dropdown so the view
     // matches the clearance data being shown.
@@ -1231,7 +1323,10 @@
     $('#admin-edit-iid').value = student.institutional_id;
     $('#admin-edit-email').value = student.email || '';
     $('#admin-edit-block').value = student.year_block || '';
-    $('#admin-edit-program').value = student.program || '';
+    // Rebuild the list around this student's CURRENT program first: records
+    // created before the official program list can hold a value that is not an
+    // option, and that value must survive an unrelated edit.
+    fillProgramSelect($('#admin-edit-program'), student.program || '');
     $('#admin-edit-semester').value = student.semester || '';
     $('#admin-edit-ay').value = student.academic_year || '';
     $('#admin-edit-status').value = student.enrollment_status || 'Regular';
@@ -1365,7 +1460,10 @@
     $('#reg-name').value = '';
     $('#reg-iid').value = '';
     $('#reg-email').value = '';
-    $('#reg-program').value = 'BSINDTECH-COMPTECH';
+    // No default program: silently pre-selecting one (as this previously did
+    // with BSINDTECH-COMPTECH) files new students under a course nobody chose.
+    // fillProgramSelect leaves the empty choice selected.
+    fillProgramSelect($('#reg-program'));
     $('#reg-block').value = '1st Year / Charity';
     $('#reg-semester').value = '2nd Semester';
     $('#reg-ay').value = '2025-2026';
@@ -1398,6 +1496,11 @@
     }
     if (!pass) {
       $('#admin-register-error').textContent = 'An initial password is required.';
+      $('#admin-register-error').classList.remove('hidden');
+      return;
+    }
+    if (!program) {
+      $('#admin-register-error').textContent = 'Please choose a Program / Course.';
       $('#admin-register-error').classList.remove('hidden');
       return;
     }
@@ -2237,7 +2340,7 @@
       '<div class="info">' +
       '<div><b>Student Name</b>' + currentUser.name + '</div>' +
       '<div><b>Student ID</b>' + currentUser.iId + '</div>' +
-      '<div><b>Program</b>' + currentUser.program + '</div>' +
+      '<div><b>Program</b>' + escapeHtml(displayProgram(currentUser.program)) + '</div>' +
       '<div><b>Year &amp; Section</b>' + currentUser.block + '</div>' +
       '<div><b>Semester</b>' + (currentUser.semester || '2nd Semester') + '</div>' +
       '<div><b>Academic Year</b>SY ' + (currentUser.academicYear || '2025-2026') + '</div>' +
