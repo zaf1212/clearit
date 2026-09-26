@@ -92,14 +92,29 @@ var DB = (function () {
   }
 
   // ── Auth: signatory login (query + bcryptjs verify + category join) ────
+  //
+  // The signature column is selected only on the first attempt. If
+  // clearit_signature_migration.sql has not been run yet, asking PostgREST for a
+  // column that does not exist fails the WHOLE query, which would lock every
+  // signatory out. So fall back to the pre-migration shape and treat the
+  // signature as simply not set yet.
   async function loginSignatory (email, password) {
-    var { data, error } = await window.supabase
-      .from('signatories')
-      .select('id, full_name, email, password_hash, role, category_id, signatory_categories(id, key, name)')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (error) throw friendlyError(error, 'Could not sign you in');
+    var attempts = [
+      'id, full_name, email, password_hash, role, category_id, signature_url, signatory_categories(id, key, name)',
+      'id, full_name, email, password_hash, role, category_id, signatory_categories(id, key, name)'
+    ];
+    var data = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await window.supabase
+        .from('signatories')
+        .select(attempts[i])
+        .eq('email', email)
+        .maybeSingle();
+      if (!r.error) { data = r.data; lastErr = null; break; }
+      lastErr = r.error;
+    }
+    var error = lastErr;
+    if (error && !data) throw friendlyError(error, 'Could not sign you in');
     if (!data) return { ok: false, error: 'No account found for that email.' };
 
     var valid = window.bcrypt && window.bcrypt.compareSync(password, data.password_hash);
@@ -114,22 +129,38 @@ var DB = (function () {
       role: data.role || 'signatory',
       category_id: cat.id,
       category_key: cat.key,
-      category_name: cat.name
+      category_name: cat.name,
+      // Absent on a pre-migration database, hence the || ''.
+      signature_url: data.signature_url || ''
     };
   }
 
   // ── Student clearance detail (one student, one semester) ───────────────
+  //
+  // signature_url comes first and has a pre-migration fallback. PostgREST fails
+  // the WHOLE select if any requested column is missing, so a database that has
+  // not run clearit_signature_migration.sql yet must fall back rather than break
+  // the student dashboard.
   async function getStudentClearance (studentUUID, semester, academicYear) {
-    var q = window.supabase
-      .from('v_clearance_details')
-      .select('category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name')
-      .eq('student_id', studentUUID)
-      .order('display_order');
-    if (semester) q = q.eq('record_semester', semester);
-    if (academicYear) q = q.eq('record_academic_year', academicYear);
-    var { data, error } = await q;
-    if (error) throw friendlyError(error, 'Could not load your clearance');
-    return data || [];
+    var attempts = [
+      'category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name, signature_url',
+      'category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name'
+    ];
+    var rows = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var q = window.supabase
+        .from('v_clearance_details')
+        .select(attempts[i])
+        .eq('student_id', studentUUID)
+        .order('display_order');
+      if (semester) q = q.eq('record_semester', semester);
+      if (academicYear) q = q.eq('record_academic_year', academicYear);
+      var r = await q;
+      if (!r.error) { rows = r.data || []; break; }
+      lastErr = r.error;
+    }
+    if (!rows) throw friendlyError(lastErr, 'Could not load your clearance');
+    return rows;
   }
 
   // True when the student has pending/hold records in the given term
@@ -144,6 +175,13 @@ var DB = (function () {
     // Try with the migrated academic_status / year_level / section_block columns
     // first, then fall back through progressively older view shapes so the app
     // keeps working before clearit_academic_status_migration.sql has been run.
+    //
+    // signature_url is deliberately NOT selected here. This is the bulk query
+    // behind the signatory table, and it is called once per student per category.
+    // A stored signature is a PNG data URL of tens of KB, so pulling that column
+    // would ship hundreds of megabytes for a real cohort to render a table that
+    // never displays an image. Only getStudentClearance (one student, feeding the
+    // printable form) asks for it.
     var attempts = [
       'student_id, institutional_id, student_name, year_block, program, academic_status, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
       'student_id, institutional_id, student_name, year_block, program, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
@@ -305,6 +343,32 @@ var DB = (function () {
       .update({ password_hash: passwordHash })
       .eq('id', signatoryUUID);
     if (error) throw friendlyError(error, 'Could not change the password');
+  }
+
+  // ── Signatory: save / clear their own digital signature ────────────────
+  //
+  // Stores a PNG data URL (e.g. "data:image/png;base64,...") in
+  // signatories.signature_url. The approval RPCs copy this onto the clearance
+  // record at approval time, so changing it here never rewrites an approval that
+  // has already happened.
+  //
+  // A direct record update is the exact equivalent of what
+  // changeSignatoryPassword does for this architecture, and it is scoped to the
+  // signed-in officer's own row by the caller's UUID. A database without the
+  // column fails with a 40001/42703, which is turned into an actionable message
+  // rather than a raw PostgREST error.
+  async function setSignatorySignature (signatoryUUID, dataUrl) {
+    var { error } = await window.supabase
+      .from('signatories')
+      .update({ signature_url: dataUrl })
+      .eq('id', signatoryUUID);
+    if (error) {
+      if (/signature_url|column/i.test(error.message || '')) {
+        throw new Error('Signature storage is not set up on this database yet. Please run clearit_signature_migration.sql.');
+      }
+      throw friendlyError(error, 'Could not save your signature');
+    }
+    return true;
   }
 
   // ── Forgot Password: resolve a Student ID to its official TCC email ─────
@@ -606,18 +670,30 @@ var DB = (function () {
 
     // Upsert the president's requirement to 'cleared' at now() — automated,
     // so signed_by stays NULL to distinguish it from a manual approval.
+    //
+    // signature_url is set to NULL for the same reason: an automatic approval is
+    // not Dr. Richel signing, so no signature image may be attached to it. Her
+    // own manual approval goes through fn_approve_clearance and does snapshot
+    // hers. The column is omitted on the retry so a database that has not run
+    // clearit_signature_migration.sql still auto-approves rather than failing the
+    // whole approval chain.
+    var base = {
+      student_id:    studentUUID,
+      category_id:   presidentCatId,
+      semester:      semester,
+      academic_year: academicYear,
+      status:        'cleared',
+      remarks:       null,
+      signed_at:     new Date().toISOString(),
+      signed_by:     null
+    };
+    var conflict = { onConflict: 'student_id,semester,academic_year,category_id' };
     var up = await window.supabase
       .from('clearance_records')
-      .upsert({
-        student_id:    studentUUID,
-        category_id:   presidentCatId,
-        semester:      semester,
-        academic_year: academicYear,
-        status:        'cleared',
-        remarks:       null,
-        signed_at:     new Date().toISOString(),
-        signed_by:     null
-      }, { onConflict: 'student_id,semester,academic_year,category_id' });
+      .upsert(Object.assign({ signature_url: null }, base), conflict);
+    if (up.error && /signature_url|column/i.test(up.error.message || '')) {
+      up = await window.supabase.from('clearance_records').upsert(base, conflict);
+    }
     if (up.error) throw friendlyError(up.error, 'Could not auto-approve the College President');
     return { approved: true };
   }
@@ -683,6 +759,7 @@ var DB = (function () {
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,
+    setSignatorySignature:   setSignatorySignature,
     findStudentByInstitutionalId: findStudentByInstitutionalId,
     sendPasswordResetEmail: sendPasswordResetEmail,
     resetPasswordChangeCount: resetPasswordChangeCount,

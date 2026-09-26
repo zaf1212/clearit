@@ -404,3 +404,22 @@ body.dark-theme {
 .dark-theme .hover\:bg-slate-100:hover   { background-color: #243249; }
 .dark-theme .hover\:bg-navy-50:hover     { background-color: #2b3a56; }
 .dark-theme .hover\:bg-navy-100:hover    { background-color: #334155; }
+
+/* ===================== Digital signature =====================
+   A signature is dark ink on a transparent background, and the drawing canvas is
+   paper. Both therefore keep a white surface in dark mode: without this the
+   ink is invisible on a dark panel, and the user cannot see what they are about
+   to save. It is an ID/class rule rather than an !important override, so it
+   simply outranks .dark-theme .bg-white instead of fighting it. */
+#sig-canvas {
+  background-color: #ffffff;
+  /* One code path for mouse, touch and stylus, and stops a touch drag from
+     scrolling the page while signing. */
+  touch-action: none;
+}
+.sig-plate {
+  background-color: #ffffff;
+}
+/* The saved/preview badge is the only coloured element on the plate row, so it
+   keeps its own contrast rather than following the dark remap. */
+.dark-theme #sig-state { background-color: #334155; color: #e2e8f0; }

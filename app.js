@@ -125,6 +125,22 @@
   var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active }]
   var semesterEditTarget = null; // semester entry being edited
 
+  // E-signature capture state.
+  //   sigStrokes  - drawn strokes as {x, y, w} points in CSS pixels, so a resize
+  //                 or a window redraw reproduces the drawing instead of losing it
+  //   sigCtx      - 2D context, already scaled by devicePixelRatio
+  //   sigPending  - the payload waiting to be saved (null = nothing pending)
+  //   sigSource   - working ImageData for the upload path, kept so "Remove
+  //                 Background" / "Trim to Ink" can be re-applied
+  var sigStrokes = [];
+  var sigCtx = null;
+  var sigCanvasW = 0;
+  var sigCanvasH = 180;
+  var sigDpr = 1;
+  var sigPending = null;
+  var sigSource = null;   // { ctx, w, h } working canvas for an uploaded image
+  var sigActiveTab = 'draw';
+
   // Semester-based clearance state
   var currentSemester = '2nd Semester';
   var currentAY       = '2025-2026';
@@ -268,6 +284,34 @@
   function formatDate(iso) {
     if (!iso) return '';
     return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  }
+
+  /* ===================== E-signature rendering ===================== */
+
+  // A stored signature is a PNG data URL that travels through the database and
+  // ends up inside the printable form, which is assembled with innerHTML and
+  // handed to a second window via document.write(). Interpolating it raw would
+  // let a crafted value break out of the src="..." attribute and inject markup
+  // into an official document.
+  //
+  // So the value is validated against a strict allowlist rather than merely
+  // escaped: it must be a base64 image data URL, and the payload must consist
+  // only of the base64 alphabet. Anything else renders nothing at all, which is
+  // the correct outcome for a signature that is not a signature.
+  var SIG_DATA_URL_RE = /^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/]+={0,2})$/;
+
+  function isValidSignatureDataUrl (v) {
+    return typeof v === 'string' && v.length > 0 && v.length <= 400000 && SIG_DATA_URL_RE.test(v);
+  }
+
+  // Renders the signature image for one signatory cell on the printable form.
+  // Returns an <img> only when the requirement is actually cleared AND a valid
+  // snapshot exists; a pending or On Hold requirement always gets an empty slot,
+  // so a signature can never appear above a line that was never signed.
+  function signatureImgTag (sig) {
+    if (!sig || sig.status !== 'cleared') return '';
+    if (!isValidSignatureDataUrl(sig.signatureUrl)) return '';
+    return '<img src="' + sig.signatureUrl + '" alt="">';
   }
 
   function catIdFromKey(key) {
@@ -578,7 +622,11 @@
           email:         res2.email,
           catId:         res2.category_id,
           catKey:        res2.category_key,
-          catName:       res2.category_name
+          catName:       res2.category_name,
+          // The officer's CURRENT signature. Approvals copy this onto the
+          // clearance record as a snapshot, so editing it later never changes a
+          // clearance that has already been signed.
+          signatureUrl:  isValidSignatureDataUrl(res2.signature_url) ? res2.signature_url : ''
         };
       }
 
@@ -674,6 +722,11 @@
 
         // RBAC: only the SAS Director gets Manage Blocks & Sections
         $('#sa-blocks-mgmt').classList.toggle('hidden', !isSAS);
+
+        // Every signatory needs a signature, so this button is not role-gated.
+        // Its label carries a tick once one is saved.
+        $('#sa-signature-btn').classList.remove('hidden');
+        sigRefreshCurrent();
       } catch (err) {
         console.error(err);
         toast('Failed to load student data: ' + err.message, 'error');
@@ -700,6 +753,8 @@
     $('#sa-manage-students').classList.add('hidden');
     $('#sa-semester-mgmt').classList.add('hidden');
     $('#sa-blocks-mgmt').classList.add('hidden');
+    $('#sa-signature-btn').classList.add('hidden');
+    closeSignatureModal();
     showView('login');
   }
 
@@ -753,7 +808,7 @@
   function buildSignatures (rows) {
     var sigs = {};
     SIG_KEYS.forEach(function (k) {
-      sigs[k] = { status: 'pending', remark: '', date: '', signatoryName: SIG_NAMES[k] || '' };
+      sigs[k] = { status: 'pending', remark: '', date: '', signatoryName: SIG_NAMES[k] || '', signatureUrl: '' };
     });
     rows.forEach(function (r) {
       if (sigs[r.category_key] !== undefined) {
@@ -761,7 +816,11 @@
           status: r.status,
           remark: r.remarks || '',
           date:   r.signed_at ? formatDate(r.signed_at) : '',
-          signatoryName: r.signatory_name || SIG_NAMES[r.category_key] || ''
+          signatoryName: r.signatory_name || SIG_NAMES[r.category_key] || '',
+          // The signature SNAPSHOT taken when this requirement was approved, not
+          // the signatory's current one. A pre-migration database has no such
+          // column, hence the || ''.
+          signatureUrl: r.signature_url || ''
         };
       }
     });
@@ -2203,6 +2262,418 @@
 
   /* ===================== Clearance PDF ===================== */
 
+  /* ===================== E-signature capture ===================== */
+  //
+  // A signatory draws or uploads a signature once; the approval RPC copies it
+  // onto every clearance record they approve, and the printable form renders
+  // that snapshot. Editing the signature later therefore never rewrites a
+  // clearance that was already issued.
+  //
+  // The image is stored as a PNG data URL in a TEXT column rather than in
+  // Supabase Storage. A bucket would need a public bucket plus storage policies
+  // created through the dashboard, and the printable form is written into a
+  // separate window via document.write(): a data URL renders there with no
+  // network round-trip and no chance of a broken image on an official document.
+
+  var SIG_INK        = '#0f172a';
+  var SIG_BASE_W     = 2.6;    // pen width at rest, in CSS pixels
+  var SIG_MIN_W      = 0.9;
+  var SIG_PAD        = 8;      // transparent margin kept around the trimmed ink
+  var SIG_MAX_OUT_W  = 760;    // cap on the exported image width
+  var SIG_MAX_FILE   = 4 * 1024 * 1024;
+
+  // Near-white background cutoff. A pixel is faded out on a short ramp between
+  // SIG_BG_TOP (fully transparent) and SIG_BG_BOT (fully opaque) so the result
+  // has no hard halo. Coloured pixels are never touched, which keeps blue and
+  // red ink intact.
+  var SIG_BG_TOP = 0.90;
+  var SIG_BG_BOT = 0.76;
+
+  function sigShowError (msg) {
+    var el = $('#sig-error');
+    el.textContent = msg || '';
+    el.classList.toggle('hidden', !msg);
+  }
+
+  function sigRefreshPreview () {
+    var btn = $('#sig-save');
+    var wrap = $('#sig-preview-wrap');
+    var prev = $('#sig-preview');
+    if (sigPending) {
+      prev.src = sigPending;
+      wrap.classList.remove('hidden');
+    } else {
+      prev.removeAttribute('src');
+      wrap.classList.add('hidden');
+    }
+    btn.disabled = !sigPending;
+  }
+
+  function sigRefreshCurrent () {
+    var img = $('#sig-current');
+    var hint = $('#sig-empty-hint');
+    var badge = $('#sig-state');
+    var label = $('#sa-signature-label');
+    var has = isValidSignatureDataUrl(currentUser && currentUser.signatureUrl);
+    if (has) {
+      img.src = currentUser.signatureUrl;
+      img.classList.remove('hidden');
+      hint.classList.add('hidden');
+      badge.textContent = 'Saved';
+      badge.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700';
+    } else {
+      img.removeAttribute('src');
+      img.classList.add('hidden');
+      hint.classList.remove('hidden');
+      badge.textContent = 'None';
+      badge.className = 'text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-600';
+    }
+    // The header button doubles as the at-a-glance status indicator, so a
+    // signatory can see they have no signature without opening the modal.
+    if (label) label.textContent = has ? 'Signature \u2713' : 'Signature';
+    var rm = $('#sig-remove');
+    if (rm) rm.disabled = !has;
+  }
+
+  function sigSetTab (tab) {
+    sigActiveTab = tab;
+    var isDraw = tab === 'draw';
+    $('#sig-panel-draw').classList.toggle('hidden', !isDraw);
+    $('#sig-panel-upload').classList.toggle('hidden', isDraw);
+    var d = $('#sig-tab-draw'), u = $('#sig-tab-upload');
+    d.setAttribute('aria-selected', String(isDraw));
+    u.setAttribute('aria-selected', String(!isDraw));
+    var on = 'flex-1 py-2 rounded-md text-sm font-semibold transition bg-white text-navy-700 shadow-sm';
+    var off = 'flex-1 py-2 rounded-md text-sm font-semibold text-slate-500 transition';
+    d.className = isDraw ? on : off;
+    u.className = isDraw ? off : on;
+    // Switching to Draw must re-derive the pending payload from the strokes, or
+    // an upload that is already staged would be silently replaced by an empty
+    // canvas the moment the tab is touched. The preview is then refreshed, or
+    // the modal is left showing a staged upload next to a Save button that no
+    // longer has anything to save.
+    if (isDraw) {
+      sigPending = sigStrokes.length ? sigExport() : null;
+      sigRefreshPreview();
+    }
+  }
+
+  // ---- canvas drawing ----------------------------------------------------
+
+  function sigSetupCanvas () {
+    var cv = $('#sig-canvas');
+    if (!cv) return;
+    // The modal is hidden until it opens, so the canvas can only be measured
+    // once it is on screen. clientWidth is 0 while display:none.
+    var cssW = cv.clientWidth || cv.parentNode.clientWidth || 460;
+    var cssH = 180;
+    sigDpr = Math.max(1, Math.min(3, window.devicePixelRatio || 1));
+    cv.width = Math.round(cssW * sigDpr);
+    cv.height = Math.round(cssH * sigDpr);
+    sigCtx = cv.getContext('2d');
+    sigCtx.setTransform(sigDpr, 0, 0, sigDpr, 0, 0);
+    sigCanvasW = cssW;
+    sigCanvasH = cssH;
+    sigRedraw();
+  }
+
+  function sigRedraw () {
+    if (!sigCtx) return;
+    sigCtx.clearRect(0, 0, sigCanvasW, sigCanvasH);
+    sigCtx.strokeStyle = SIG_INK;
+    sigCtx.fillStyle = SIG_INK;
+    sigCtx.lineCap = 'round';
+    sigCtx.lineJoin = 'round';
+    sigStrokes.forEach(function (s) { sigPaintStroke(s); });
+    $('#sig-canvas-placeholder').classList.toggle('hidden', sigStrokes.length > 0);
+  }
+
+  // One stroke = an array of {x, y, w}. Each segment is its own path so the
+  // width can vary along the stroke (a pen thins as it moves faster), and the
+  // segment is drawn to the midpoint of the next one with a quadratic curve,
+  // which is what removes the polygonal look of plain lineTo.
+  //
+  // fromIdx limits the work to the segments added since the last call, so live
+  // drawing paints each segment exactly once. Repainting the whole stroke on
+  // every pointermove instead would compound alpha along the antialiased edges
+  // (the context is never cleared mid-stroke), which both darkens the ink and
+  // makes a live stroke come out heavier than the same stroke after an undo
+  // forces a clean redraw.
+  //
+  // The pen-down dot is laid down here on the fromIdx === 0 path, which both the
+  // live start and a full redraw take. Painting it separately at pointerdown
+  // while a redraw skipped it made an undo quietly drop a few edge pixels,
+  // because the dot and the first segment's round cap cover the same spot.
+  function sigPaintStroke (pts, fromIdx) {
+    if (!pts.length) return;
+    var start = fromIdx || 0;
+    if (start === 0) {
+      sigCtx.beginPath();
+      sigCtx.arc(pts[0].x, pts[0].y, Math.max(SIG_MIN_W, pts[0].w) / 2, 0, Math.PI * 2);
+      sigCtx.fill();
+    }
+    if (pts.length === 1) return;
+    for (var i = Math.max(1, start); i < pts.length; i++) {
+      var a = pts[i - 1], b = pts[i];
+      var mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      sigCtx.beginPath();
+      sigCtx.lineWidth = b.w;
+      if (i === 1) {
+        sigCtx.moveTo(a.x, a.y);
+        sigCtx.quadraticCurveTo(a.x, a.y, mx, my);
+      } else {
+        var pa = pts[i - 2];
+        sigCtx.moveTo((pa.x + a.x) / 2, (pa.y + a.y) / 2);
+        sigCtx.quadraticCurveTo(a.x, a.y, mx, my);
+      }
+      sigCtx.stroke();
+    }
+  }
+
+  function sigCanvasPoint (ev) {
+    var cv = $('#sig-canvas');
+    var r = cv.getBoundingClientRect();
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top };
+  }
+
+  function sigClearCanvas () {
+    sigStrokes = [];
+    if (sigCtx) sigCtx.clearRect(0, 0, sigCanvasW, sigCanvasH);
+    $('#sig-canvas-placeholder').classList.remove('hidden');
+    if (sigActiveTab === 'draw') sigPending = null;
+    sigRefreshPreview();
+  }
+
+  function sigUndoStroke () {
+    if (!sigStrokes.length) return;
+    sigStrokes.pop();
+    sigRedraw();
+    if (sigActiveTab === 'draw') sigPending = sigStrokes.length ? sigExport() : null;
+    sigRefreshPreview();
+  }
+
+  // ---- drawing to a data URL --------------------------------------------
+
+  // Finds the bounding box of everything with alpha above the noise floor.
+  // Returns null when the canvas is genuinely blank, which is how "nothing
+  // drawn" is distinguished from "drawn something invisible".
+  function sigInkBounds (data, w, h) {
+    var d = data.data;
+    var minX = w, minY = h, maxX = -1, maxY = -1;
+    for (var y = 0; y < h; y++) {
+      var row = y * w;
+      for (var x = 0; x < w; x++) {
+        if (d[(row + x) * 4 + 3] > 8) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+    return maxX < 0 ? null : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  }
+
+  // Crops to the ink and returns a PNG data URL.
+  //
+  // Trimming is what makes a drawn signature usable: a small scrawl in a large
+  // canvas would otherwise print as a speck in the middle of an empty box.
+  function sigCropToInk (canvas) {
+    var w = canvas.width, h = canvas.height;
+    if (!w || !h) return null;
+    var b = sigInkBounds(canvas.getContext('2d').getImageData(0, 0, w, h), w, h);
+    if (!b) return null;
+
+    var pad = Math.round(SIG_PAD * sigDpr);
+    var sx = Math.max(0, b.x - pad);
+    var sy = Math.max(0, b.y - pad);
+    var sw = Math.min(w - sx, b.w + pad * 2);
+    var sh = Math.min(h - sy, b.h + pad * 2);
+
+    // Cap the OUTPUT in device pixels, so a 2x display still yields a crisp
+    // image while the stored payload stays bounded. Working in the canvas's own
+    // pixel space keeps this correct for both the drawing canvas and an
+    // arbitrarily scaled upload.
+    var maxW = Math.round(SIG_MAX_OUT_W * sigDpr);
+    var scale = Math.min(1, maxW / sw);
+    var ow = Math.max(1, Math.round(sw * scale));
+    var oh = Math.max(1, Math.round(sh * scale));
+
+    var out = document.createElement('canvas');
+    out.width = ow;
+    out.height = oh;
+    var octx = out.getContext('2d');
+    octx.imageSmoothingQuality = 'high';
+    octx.drawImage(canvas, sx, sy, sw, sh, 0, 0, ow, oh);
+    return out.toDataURL('image/png');
+  }
+
+  function sigExport () {
+    if (!sigStrokes.length || !sigCtx) return null;
+    var url = sigCropToInk($('#sig-canvas'));
+    return isValidSignatureDataUrl(url) ? url : null;
+  }
+
+  // ---- upload path ------------------------------------------------------
+
+  // Fades out a near-white, near-neutral background.
+  //
+  // This is a white-background remover, not a general segmentation model: a
+  // genuinely light-grey signature (graphite, pale ink) falls into the same
+  // brightness band as paper and can be faded with it. If that happens, pick the
+  // file again or use an image that is already a cut-out.
+  function sigStripBackground (ctx, w, h) {
+    var img = ctx.getImageData(0, 0, w, h);
+    var d = img.data;
+    var n = w * h;
+    var clear = 0;
+    for (var i = 0; i < n; i++) {
+      if (d[i * 4 + 3] < 250) clear++;
+    }
+    // An image that already carries real transparency is a cut-out; leave it be
+    // rather than punching holes through the ink.
+    if (clear / n > 0.02) return false;
+
+    for (var j = 0; j < n; j++) {
+      var o = j * 4;
+      var r = d[o], g = d[o + 1], b = d[o + 2];
+      var mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+      var sat = mx === 0 ? 0 : (mx - mn) / mx;
+      if (sat >= 0.12) continue;                 // coloured pixel: keep as-is
+      var lum = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+      var k = (SIG_BG_TOP - lum) / (SIG_BG_TOP - SIG_BG_BOT);
+      if (k <= 0) d[o + 3] = 0;
+      else if (k < 1) d[o + 3] = Math.round(255 * k);
+      // k >= 1 leaves the original alpha untouched
+    }
+    ctx.putImageData(img, 0, 0);
+    return true;
+  }
+
+  // Scales the file into a working canvas, capped so a large photo cannot lock
+  // the tab up or produce a payload past the database's size guard.
+  function sigLoadFile (file) {
+    return new Promise(function (resolve, reject) {
+      if (!/^image\/(png|jpeg|jpg)$/.test(file.type || '')) {
+        return reject(new Error('Please choose a PNG or JPG image.'));
+      }
+      if (file.size > SIG_MAX_FILE) {
+        return reject(new Error('That image is larger than 4 MB. Please use a smaller file.'));
+      }
+      var fr = new FileReader();
+      fr.onerror = function () { reject(new Error('Could not read that file.')); };
+      fr.onload = function () {
+        var img = new Image();
+        img.onerror = function () { reject(new Error('That file is not a readable image.')); };
+        img.onload = function () {
+          var maxSide = 1400;
+          var s = Math.min(1, maxSide / Math.max(img.width, img.height));
+          var w = Math.max(1, Math.round(img.width * s));
+          var h = Math.max(1, Math.round(img.height * s));
+          var cv = document.createElement('canvas');
+          cv.width = w;
+          cv.height = h;
+          var ctx = cv.getContext('2d');
+          // Fill white first so a transparent PNG flattens to something the
+          // background test can reason about, then keep its own alpha via the
+          // existing-alpha short circuit in sigStripBackground.
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+          resolve({ canvas: cv, ctx: ctx, w: w, h: h });
+        };
+        img.src = fr.result;
+      };
+      fr.readAsDataURL(file);
+    });
+  }
+
+  // Re-crops the working upload into the pending payload and reports whether it
+  // produced anything usable.
+  //
+  // It deliberately does NOT own the error message and returns a boolean
+  // instead: callers such as "Remove Background" need to say something specific
+  // ("there was already a transparent background"), and having this clear the
+  // message on success silently wiped that feedback.
+  function sigApplySource () {
+    if (!sigSource) return false;
+    var url = sigCropToInk(sigSource.canvas);
+    sigPending = isValidSignatureDataUrl(url) ? url : null;
+    sigRefreshPreview();
+    return !!sigPending;
+  }
+
+  var SIG_NO_INK = 'No visible ink was found in that image. Try a higher-contrast or tighter crop.';
+
+  // ---- open / close / save ---------------------------------------------
+
+  function openSignatureModal () {
+    if (!currentUser || currentUser.type !== 'signatory') return;
+    sigShowError('');
+    sigStrokes = [];
+    sigSource = null;
+    sigPending = null;
+    $('#sig-file').value = '';
+    $('#sig-file-label').textContent = 'Choose a signature image';
+    sigSetTab('draw');
+    sigRefreshCurrent();
+    sigRefreshPreview();
+    $('#signature-modal').classList.remove('hidden');
+    $('#loading-overlay').classList.add('hidden');
+    // Measure after the modal is visible, otherwise the canvas is 0 wide.
+    sigSetupCanvas();
+    if (sigCtx) sigCtx.clearRect(0, 0, sigCanvasW, sigCanvasH);
+    $('#sig-canvas-placeholder').classList.remove('hidden');
+  }
+
+  function closeSignatureModal () {
+    $('#signature-modal').classList.add('hidden');
+    sigStrokes = [];
+    sigSource = null;
+    sigPending = null;
+    sigShowError('');
+  }
+
+  async function sigSave () {
+    if (!sigPending) { sigShowError('Draw or upload a signature first.'); return; }
+    if (!isValidSignatureDataUrl(sigPending)) { sigShowError('That image could not be read. Please try again.'); return; }
+
+    var btn = $('#sig-save');
+    var was = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try {
+      await DB.setSignatorySignature(currentUser.signatoryUUID, sigPending);
+      currentUser.signatureUrl = sigPending;
+      sigRefreshCurrent();
+      toast('Signature saved. It will appear on the clearances you approve from now on.', 'success');
+      closeSignatureModal();
+    } catch (err) {
+      console.error(err);
+      sigShowError(err && err.message ? err.message : 'Could not save your signature.');
+    } finally {
+      btn.textContent = was;
+      btn.disabled = !sigPending;
+    }
+  }
+
+  async function sigRemove () {
+    if (!isValidSignatureDataUrl(currentUser && currentUser.signatureUrl)) return;
+    var btn = $('#sig-remove');
+    btn.disabled = true;
+    try {
+      await DB.setSignatorySignature(currentUser.signatureUUID, null);
+      currentUser.signatureUrl = '';
+      sigRefreshCurrent();
+      toast('Signature removed.', 'info');
+    } catch (err) {
+      console.error(err);
+      sigShowError(err && err.message ? err.message : 'Could not remove your signature.');
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
   function downloadClearance () {
     if (!currentUser || currentUser.type !== 'student') return;
     if (studentPrereqBlocked) {
@@ -2324,6 +2795,12 @@
       '}' +
       '.sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 18px;margin-top:44px;}' +
       '.sig{text-align:center;font-size:11px;color:#334155;}' +
+      // The image sits directly above the printed name. The slot is a fixed
+      // height on EVERY cell, cleared or not, so the names and lines of the nine
+      // offices stay aligned across each grid row instead of riding up and down
+      // depending on who has signed.
+      '.sig .sigimg{height:46px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:3px;}' +
+      '.sig .sigimg img{max-height:44px;max-width:90%;object-fit:contain;object-position:bottom center;}' +
       '.sig .name{font-weight:700;color:#0f172a;font-size:11.5px;min-height:17px;line-height:1.3;margin-bottom:6px;}' +
       '.sig .line{border-top:1px solid #334155;}' +
       '.sig .role{color:#475569;margin-top:5px;line-height:1.3;}' +
@@ -2353,12 +2830,14 @@
         var d = sigs[k];
         var nameTxt = (d.status === 'cleared' && d.signatoryName) ? d.signatoryName : '';
         return '<div class="sig">' +
+          '<div class="sigimg">' + signatureImgTag(d) + '</div>' +
           '<div class="name">' + (nameTxt || '&nbsp;') + '</div>' +
           '<div class="line"></div>' +
           '<div class="role">' + SIG_LABELS[k] + '</div>' +
           '</div>';
       }).join('') +
       '<div class="sig president">' +
+        '<div class="sigimg">' + signatureImgTag(sigs.president) + '</div>' +
         '<div class="name">' + ((sigs.president && sigs.president.status === 'cleared' && sigs.president.signatoryName) ? sigs.president.signatoryName : '&nbsp;') + '</div>' +
         '<div class="line"></div>' +
         '<div class="role">' + (SIG_LABELS.president || 'College President (Final Approval)') + '</div>' +
@@ -3054,6 +3533,150 @@
     $('#pw-close').addEventListener('click', closePasswordModal);
     $('#pw-cancel').addEventListener('click', closePasswordModal);
     $('#pw-backdrop').addEventListener('click', closePasswordModal);
+
+    // ── Digital signature (every signatory, not just the SAS Director) ──────
+    $('#sa-signature-btn').addEventListener('click', openSignatureModal);
+    $('#signature-close').addEventListener('click', closeSignatureModal);
+    $('#signature-backdrop').addEventListener('click', closeSignatureModal);
+    $('#sig-cancel').addEventListener('click', closeSignatureModal);
+    $('#sig-save').addEventListener('click', sigSave);
+    $('#sig-remove').addEventListener('click', sigRemove);
+    $('#sig-clear').addEventListener('click', sigClearCanvas);
+    $('#sig-undo').addEventListener('click', sigUndoStroke);
+    $('#sig-tab-draw').addEventListener('click', function () { sigSetTab('draw'); });
+    $('#sig-tab-upload').addEventListener('click', function () { sigSetTab('upload'); });
+    $('#sig-bg-remove').addEventListener('click', function () {
+      if (!sigSource) { sigShowError('Choose an image first.'); return; }
+      var stripped = sigStripBackground(sigSource.ctx, sigSource.w, sigSource.h);
+      var ok = sigApplySource();
+      if (!ok) sigShowError(SIG_NO_INK);
+      else if (!stripped) sigShowError('That image already had a transparent background, so there was nothing to remove.');
+      else sigShowError('');
+    });
+    $('#sig-crop').addEventListener('click', function () {
+      if (!sigSource) { sigShowError('Choose an image first.'); return; }
+      sigShowError(sigApplySource() ? '' : SIG_NO_INK);
+    });
+
+    $('#sig-file').addEventListener('change', function (e) {
+      var file = e.target.files && e.target.files[0];
+      if (!file) return;
+      $('#sig-file-label').textContent = file.name;
+      sigLoadFile(file).then(function (src) {
+        // The background pass runs on load so a scan or a phone photo works with
+        // no extra step, and the explicit button can re-apply it if the result
+        // needs a second pass.
+        sigStripBackground(src.ctx, src.w, src.h);
+        sigSource = src;
+        sigShowError(sigApplySource() ? '' : SIG_NO_INK);
+      }).catch(function (err) {
+        sigSource = null;
+        sigPending = null;
+        sigRefreshPreview();
+        sigShowError(err && err.message ? err.message : 'Could not read that file.');
+      });
+    });
+
+    // Pointer events cover mouse, touch and stylus with one code path. The
+    // canvas sets touch-action:none (Tailwind's touch-none) so a touch drag
+    // draws instead of scrolling the page.
+    (function () {
+      var cv = $('#sig-canvas');
+      if (!cv) return;
+      var drawing = false;
+      var cur = null;
+
+      function down (ev) {
+        if (ev.button !== undefined && ev.button !== 0) return;   // ignore right/middle
+        ev.preventDefault();
+        drawing = true;
+        cur = { x: 0, y: 0, t: ev.timeStamp, w: SIG_BASE_W };
+        var p = sigCanvasPoint(ev);
+        cur.x = p.x; cur.y = p.y;
+        sigStrokes.push([{ x: p.x, y: p.y, w: SIG_BASE_W }]);
+        $('#sig-canvas-placeholder').classList.add('hidden');
+        if (cv.setPointerCapture) { try { cv.setPointerCapture(ev.pointerId); } catch (e) {} }
+        // sigPaintStroke lays down the pen-down dot; doing it here as well would
+        // double it against the first segment's round cap.
+        sigPaintStroke(sigStrokes[sigStrokes.length - 1], 0);
+        sigPending = null;
+        sigRefreshPreview();
+      }
+
+      function move (ev) {
+        if (!drawing || !cur) return;
+        ev.preventDefault();
+        // Coalesced events recover the full sample rate of a stylus on a modern
+        // browser, so a fast stroke is smooth instead of polygonal.
+        //
+        // The length check matters: getCoalescedEvents() can legitimately return
+        // an EMPTY array, and [] is truthy, so a plain "|| [ev]" fallback never
+        // fires and the loop below runs zero times. That degrades silently into
+        // a single dot with no stroke, which is a nasty thing to hand someone
+        // who is trying to sign a clearance form.
+        var evts = null;
+        if (ev.getCoalescedEvents) {
+          try { evts = ev.getCoalescedEvents(); } catch (e) { evts = null; }
+        }
+        if (!evts || !evts.length) evts = [ev];
+        // Remember where this stroke stood before the new samples, so only the
+        // genuinely new segments get painted.
+        var strokeNow = sigStrokes[sigStrokes.length - 1];
+        var from = strokeNow ? strokeNow.length : 0;
+        for (var i = 0; i < evts.length; i++) {
+          var p = sigCanvasPoint(evts[i]);
+          var stroke = sigStrokes[sigStrokes.length - 1];
+          if (!stroke) break;
+          var last = stroke[stroke.length - 1];
+          var dt = Math.max(1, evts[i].timeStamp - cur.t);
+          var dist = Math.hypot(p.x - last.x, p.y - last.y);
+          // Faster movement thins the line, which is what makes a drawn
+          // signature read as ink rather than as a uniform marker.
+          var speed = dist / dt;
+          var w = Math.max(SIG_MIN_W, SIG_BASE_W - Math.min(SIG_BASE_W * 0.7, speed * 0.32));
+          stroke.push({ x: p.x, y: p.y, w: w });
+          cur.t = evts[i].timeStamp;
+        }
+        sigPaintStroke(sigStrokes[sigStrokes.length - 1], from);
+        sigPending = null;
+        sigRefreshPreview();
+      }
+
+      function up (ev) {
+        if (!drawing) return;
+        drawing = false;
+        cur = null;
+        if (cv.releasePointerCapture && ev && ev.pointerId !== undefined) {
+          try { cv.releasePointerCapture(ev.pointerId); } catch (e) {}
+        }
+        // Trim as soon as the stroke ends, so Save reflects the real output and
+        // an all-blank canvas cannot be saved.
+        sigPending = sigExport();
+        sigRefreshPreview();
+      }
+
+      cv.addEventListener('pointerdown', down);
+      cv.addEventListener('pointermove', move);
+      cv.addEventListener('pointerup', up);
+      cv.addEventListener('pointercancel', up);
+      cv.addEventListener('pointerleave', up);
+      cv.addEventListener('contextmenu', function (e) { e.preventDefault(); });
+    })();
+
+    // Re-trim on rotate/resize: the stored point coordinates are in CSS pixels,
+    // so a changed canvas width would otherwise stretch or clip the drawing.
+    window.addEventListener('resize', function () {
+      if ($('#signature-modal').classList.contains('hidden')) return;
+      var prevW = sigCanvasW;
+      sigSetupCanvas();
+      if (Math.abs(sigCanvasW - prevW) > 1) {
+        var f = sigCanvasW / (prevW || 1);
+        sigStrokes.forEach(function (s) {
+          s.forEach(function (pt) { pt.x *= f; });
+        });
+        sigRedraw();
+      }
+    });
     $('#pw-form').addEventListener('submit', function (e) {
       e.preventDefault();
       submitPasswordChange();
