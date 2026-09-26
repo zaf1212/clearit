@@ -750,18 +750,22 @@ BEGIN
   END IF;
   ------------------------------------------------------------------
   -- Generate this term's clearance records (append-only)
+  --
+  -- Deliberately a bare INSERT plus GET DIAGNOSTICS rather than the
+  -- "SELECT count(*) INTO n FROM (INSERT ... RETURNING 1) x" idiom. That
+  -- idiom is valid SQL but PL/pgSQL cannot parse it: the plpgsql grammar tries
+  -- to read the parenthesised INSERT as a row expression and fails with
+  -- 'syntax error at or near "INTO"'. After ON CONFLICT DO NOTHING, ROW_COUNT
+  -- is exactly the number of rows actually inserted, which is what we want.
   ------------------------------------------------------------------
-  SELECT count(*) INTO v_created
-  FROM (
-    INSERT INTO clearance_records (student_id, category_id, status, semester, academic_year)
-    SELECT s.id, c.id, 'pending', p_semester, p_academic_year
-    FROM students s
-    CROSS JOIN signatory_categories c
-    WHERE fn_is_clearance_eligible(s.academic_status, s.enrollment_status)
-      AND s.id = ANY (v_cohort)
-    ON CONFLICT (student_id, semester, academic_year, category_id) DO NOTHING
-    RETURNING 1
-  ) created;
+  INSERT INTO clearance_records (student_id, category_id, status, semester, academic_year)
+  SELECT s.id, c.id, 'pending', p_semester, p_academic_year
+  FROM students s
+  CROSS JOIN signatory_categories c
+  WHERE fn_is_clearance_eligible(s.academic_status, s.enrollment_status)
+    AND s.id = ANY (v_cohort)
+  ON CONFLICT (student_id, semester, academic_year, category_id) DO NOTHING;
+  GET DIAGNOSTICS v_created = ROW_COUNT;
   RETURN jsonb_build_object(
     'mode',                p_mode,
     'semester',            p_semester,
