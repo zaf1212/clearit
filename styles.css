@@ -215,6 +215,11 @@ th.active-col {
 body.dark-theme {
   background: #0f172a;   /* Slate 900 */
   color: #f8fafc;        /* Off-white  */
+  /* Tell the engine to render native widget internals (select popups, scrollbars,
+     autofill fill, focus rings, checkbox glyphs) with DARK styling. Without this
+     the page stays "light scheme" inside a dark UI, which is what makes autofilled
+     login fields paint a light background under our light text colour. */
+  color-scheme: dark;
 }
 
 /* Page surfaces */
@@ -266,8 +271,55 @@ body.dark-theme {
   background-color: #1e293b;
   border-color: #334155;
   color: #f8fafc;
+  /* WebKit/Blink paint form text through -webkit-text-fill-color when it is set,
+     and that beats `color`. Pin it (and the caret) so typed text is always
+     legible no matter what the engine defaults to. */
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
 }
-.dark-theme input::placeholder { color: #64748b; }
+.dark-theme input::placeholder,
+.dark-theme textarea::placeholder {
+  color: #64748b;
+  -webkit-text-fill-color: #64748b;
+}
+.dark-theme input:disabled,
+.dark-theme select:disabled,
+.dark-theme textarea:disabled {
+  color: #94a3b8;
+  -webkit-text-fill-color: #94a3b8;
+  background-color: #16213a;
+}
+
+/* Select dropdown popups are drawn from the <option> styles — without these the
+   option text stays dark-on-dark / light-on-light inside the native list. */
+.dark-theme option,
+.dark-theme optgroup {
+  background-color: #1e293b;
+  color: #f8fafc;
+  -webkit-text-fill-color: #f8fafc;
+}
+.dark-theme optgroup { font-weight: 700; }
+
+/* Chrome/Edge password manager + browser autofill force a light fill that a plain
+   `background-color` cannot override, leaving our light text on a light chip.
+   The inset box-shadow paints the dark fill back over it. */
+.dark-theme input:-webkit-autofill,
+.dark-theme input:-webkit-autofill:hover,
+.dark-theme input:-webkit-autofill:focus,
+.dark-theme input:-webkit-autofill:active {
+  -webkit-text-fill-color: #f8fafc;
+  caret-color: #f8fafc;
+  -webkit-box-shadow: 0 0 0 1000px #1e293b inset;
+  box-shadow: 0 0 0 1000px #1e293b inset;
+  /* keeps the transition from re-letting the UA fill bleed back in */
+  transition: background-color 600000s 0s, color 600000s 0s;
+}
+/* Same protection for the "Remember me" / "Select all" checkboxes. */
+.dark-theme input[type="checkbox"] {
+  background-color: #1e293b;
+  border-color: #334155;
+  accent-color: #648ad3;
+}
 
 /* Tables: dark slate headers + alternating rows */
 .dark-theme thead tr.text-slate-500,
