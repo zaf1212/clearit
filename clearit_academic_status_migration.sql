@@ -235,12 +235,17 @@ BEGIN
   ------------------------------------------------------------------
   -- Roster-wide status census (drives the "skipped" numbers in the UI)
   ------------------------------------------------------------------
+  -- One INTO clause, after the whole select list. Repeating INTO per column
+  -- is not valid PL/pgSQL: the parser reads the second count() as being in
+  -- expression position and tries to resolve it as a variable ("count is not
+  -- a known variable").
   SELECT
-    count(*) FILTER (WHERE academic_status = 'Active')     INTO v_active,
-    count(*) FILTER (WHERE academic_status = 'Dropped')    INTO v_dropped,
-    count(*) FILTER (WHERE academic_status = 'Suspended')  INTO v_suspended,
-    count(*) FILTER (WHERE academic_status = 'Graduated')  INTO v_graduated,
-    count(*) FILTER (WHERE academic_status = 'Inactive')   INTO v_inactive
+    count(*) FILTER (WHERE academic_status = 'Active'),
+    count(*) FILTER (WHERE academic_status = 'Dropped'),
+    count(*) FILTER (WHERE academic_status = 'Suspended'),
+    count(*) FILTER (WHERE academic_status = 'Graduated'),
+    count(*) FILTER (WHERE academic_status = 'Inactive')
+  INTO v_active, v_dropped, v_suspended, v_graduated, v_inactive
   FROM students;
 
   ------------------------------------------------------------------
