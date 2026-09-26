@@ -288,20 +288,62 @@
 
   /* ===================== E-signature rendering ===================== */
 
-  // A stored signature is a PNG data URL that travels through the database and
-  // ends up inside the printable form, which is assembled with innerHTML and
-  // handed to a second window via document.write(). Interpolating it raw would
-  // let a crafted value break out of the src="..." attribute and inject markup
-  // into an official document.
+  // A stored signature ends up inside the printable form, which is assembled as
+  // one HTML string and handed to a second window via document.write().
+  // Interpolating the stored value raw would let a crafted value break out of
+  // the src="..." attribute and inject markup into an official document.
   //
   // So the value is validated against a strict allowlist rather than merely
-  // escaped: it must be a base64 image data URL, and the payload must consist
-  // only of the base64 alphabet. Anything else renders nothing at all, which is
-  // the correct outcome for a signature that is not a signature.
+  // escaped, and the allowlist is pinned to THIS project's own Storage bucket
+  // rather than "any https URL". Accepting arbitrary hosts would mean a tampered
+  // row could point the official form at someone else's server.
+  //
+  // Two shapes are valid:
+  //   * a Supabase Storage public URL - where signatures live now
+  //   * a base64 image data URL      - where a signature saved before the move
+  //                                    to Storage lives. Still honoured so that
+  //                                    anyone who saved one in the meantime keeps
+  //                                    a working signature and a printable form,
+  //                                    instead of silently losing it.
+  var SIG_MAX_SOURCE_LEN = 400000;
+
+  // Map of stored signature URL -> inlined bytes, populated just before a
+  // printable form is written. Declared here (rather than next to the print
+  // code) so signatureImgTag and the resolver obviously share one cache.
+  var sigInlinedSrc = {};
+  var SIG_PRINT_FETCH_TIMEOUT = 6000;
+
   var SIG_DATA_URL_RE = /^data:image\/(png|jpeg|jpg);base64,([A-Za-z0-9+/]+={0,2})$/;
 
+  // Built from the configured project URL rather than hard-coded, so a project
+  // whose ref differs from ours does not need this file edited, and so no other
+  // host can ever be accepted.
+  var SIG_ORIGIN_RE = (function () {
+    var origin = String(window.__SUPABASE_URL || '').replace(/\/+$/, '');
+    return origin ? new RegExp('^' + origin.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '/') : null;
+  })();
+
   function isValidSignatureDataUrl (v) {
-    return typeof v === 'string' && v.length > 0 && v.length <= 400000 && SIG_DATA_URL_RE.test(v);
+    return typeof v === 'string' && v.length > 0 && v.length <= SIG_MAX_SOURCE_LEN && SIG_DATA_URL_RE.test(v);
+  }
+
+  function isValidStorageSignatureUrl (v) {
+    if (typeof v !== 'string' || !v || v.length > 2000) return false;
+    if (!SIG_ORIGIN_RE || !SIG_ORIGIN_RE.test(v)) return false;
+    // Must be exactly: <origin>/storage/v1/object/public/<bucket>/<key>
+    var rest = v.replace(SIG_ORIGIN_RE, '');
+    var m = /^storage\/v1\/object\/public\/([^/]+)\/([A-Za-z0-9][A-Za-z0-9._%-]*)$/.exec(rest);
+    if (!m) return false;
+    // Pin the bucket to the one this app writes to, so a stored value cannot
+    // pull an arbitrary object out of some other public bucket on the project.
+    if (m[1] !== DB.SIG_BUCKET) return false;
+    // No traversal: the key charset above already excludes "/" and "..", but
+    // check explicitly so the intent survives a future charset change.
+    return m[2].indexOf('..') === -1;
+  }
+
+  function isValidSignatureSource (v) {
+    return isValidSignatureDataUrl(v) || isValidStorageSignatureUrl(v);
   }
 
   // Renders the signature image for one signatory cell on the printable form.
@@ -310,8 +352,12 @@
   // so a signature can never appear above a line that was never signed.
   function signatureImgTag (sig) {
     if (!sig || sig.status !== 'cleared') return '';
-    if (!isValidSignatureDataUrl(sig.signatureUrl)) return '';
-    return '<img src="' + sig.signatureUrl + '" alt="">';
+    if (!isValidSignatureSource(sig.signatureUrl)) return '';
+    // Prefer the bytes inlined by sigResolveImagesForPrint so the print window
+    // has nothing left to download; fall back to the stored URL if inlining
+    // failed, which still renders whenever the network cooperates.
+    var src = sigInlinedSrc[sig.signatureUrl] || sig.signatureUrl;
+    return '<img src="' + src + '" alt="">';
   }
 
   function catIdFromKey(key) {
@@ -626,7 +672,7 @@
           // The officer's CURRENT signature. Approvals copy this onto the
           // clearance record as a snapshot, so editing it later never changes a
           // clearance that has already been signed.
-          signatureUrl:  isValidSignatureDataUrl(res2.signature_url) ? res2.signature_url : ''
+          signatureUrl:  isValidSignatureSource(res2.signature_url) ? res2.signature_url : ''
         };
       }
 
@@ -2269,11 +2315,19 @@
   // that snapshot. Editing the signature later therefore never rewrites a
   // clearance that was already issued.
   //
-  // The image is stored as a PNG data URL in a TEXT column rather than in
-  // Supabase Storage. A bucket would need a public bucket plus storage policies
-  // created through the dashboard, and the printable form is written into a
-  // separate window via document.write(): a data URL renders there with no
-  // network round-trip and no chance of a broken image on an official document.
+  // The image is captured here as a PNG data URL because that is what a canvas
+  // can produce and what a File input can hand over cheaply, but it is NOT what
+  // gets stored: DB.saveSignatorySignature uploads the bytes to Supabase Storage
+  // and writes only the resulting public URL into the database. The column
+  // therefore holds a couple of hundred characters instead of tens of kilobytes
+  // of base64, and clearance records no longer carry an image payload at all.
+  //
+  // The printable form is still assembled as an HTML string and written into a
+  // second window via document.write(), so a remote <img> there would be a
+  // network fetch that may not finish before the page prints. That is handled at
+  // the print boundary by sigResolveImagesForPrint, which pulls the bytes into
+  // the current document and inlines them, so the printed form stays
+  // self-contained and offline-safe.
 
   var SIG_INK        = '#0f172a';
   var SIG_BASE_W     = 2.6;    // pen width at rest, in CSS pixels
@@ -2314,7 +2368,7 @@
     var hint = $('#sig-empty-hint');
     var badge = $('#sig-state');
     var label = $('#sa-signature-label');
-    var has = isValidSignatureDataUrl(currentUser && currentUser.signatureUrl);
+    var has = isValidSignatureSource(currentUser && currentUser.signatureUrl);
     if (has) {
       img.src = currentUser.signatureUrl;
       img.classList.remove('hidden');
@@ -2636,6 +2690,10 @@
 
   async function sigSave () {
     if (!sigPending) { sigShowError('Draw or upload a signature first.'); return; }
+    // The staged value is always a data URL (that is what a canvas produces and
+    // what a File input hands over cheaply), so it is checked against the
+    // data-URL shape rather than the looser "already stored" check used when
+    // rendering, which also accepts a Storage URL.
     if (!isValidSignatureDataUrl(sigPending)) { sigShowError('That image could not be read. Please try again.'); return; }
 
     var btn = $('#sig-save');
@@ -2643,8 +2701,10 @@
     btn.disabled = true;
     btn.textContent = 'Saving\u2026';
     try {
-      await DB.setSignatorySignature(currentUser.signatoryUUID, sigPending);
-      currentUser.signatureUrl = sigPending;
+      // Uploads the image bytes to the "signatures" bucket and writes only the
+      // resulting public URL into the database.
+      var publicUrl = await DB.saveSignatorySignature(currentUser.signatoryUUID, sigPending);
+      currentUser.signatureUrl = publicUrl;
       sigRefreshCurrent();
       toast('Signature saved. It will appear on the clearances you approve from now on.', 'success');
       closeSignatureModal();
@@ -2658,11 +2718,11 @@
   }
 
   async function sigRemove () {
-    if (!isValidSignatureDataUrl(currentUser && currentUser.signatureUrl)) return;
+    if (!isValidSignatureSource(currentUser && currentUser.signatureUrl)) return;
     var btn = $('#sig-remove');
     btn.disabled = true;
     try {
-      await DB.setSignatorySignature(currentUser.signatureUUID, null);
+      await DB.clearSignatorySignature(currentUser.signatoryUUID);
       currentUser.signatureUrl = '';
       sigRefreshCurrent();
       toast('Signature removed.', 'info');
@@ -2674,7 +2734,77 @@
     }
   }
 
-  function downloadClearance () {
+  // Signatures now live in Supabase Storage, so a snapshot on a clearance is a
+  // remote https URL. The printable form is assembled as an HTML string and
+  // written into a SECOND window via document.write(), and printing is triggered
+  // by script a few hundred milliseconds later. An <img> pointing at a remote
+  // host that has not finished loading at that moment prints as an empty box -
+  // which on an official clearance form means a signature line with no signature
+  // on it, on a document that also carries an OFFICIAL VERIFICATION QR code,
+  // with nothing on screen to suggest anything went wrong.
+  //
+  // So before the print document is written, each remote signature is fetched
+  // HERE and inlined as a data URL. The printed form goes out self-contained:
+  // it still renders if the print window's network is slow or gone, and the
+  // database still only ever stores a short URL.
+  //
+  // Failure here is never fatal. If a fetch fails or times out, the original URL
+  // is used unchanged and the print window's own image load is given time to
+  // finish - which is exactly the behaviour that existed before, just without
+  // the blank-box risk.
+  function sigBlobToDataUrl (blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { resolve(String(fr.result || '')); };
+      fr.onerror = function () { reject(new Error('read failed')); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  async function sigInlineOne (url, ctrl) {
+    if (sigInlinedSrc[url]) return;
+    var opts = {};
+    if (ctrl) opts.signal = ctrl.signal;
+    var res = await fetch(url, opts);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    var blob = await res.blob();
+    // Only inline an actual image; a captive portal or an error page would
+    // otherwise be inlined as if it were a signature.
+    if (!/^image\//.test(blob.type || '')) throw new Error('not an image');
+    var dataUrl = await sigBlobToDataUrl(blob);
+    if (isValidSignatureDataUrl(dataUrl)) sigInlinedSrc[url] = dataUrl;
+  }
+
+  async function sigResolveImagesForPrint (sigs) {
+    var jobs = [];
+    SIG_KEYS.forEach(function (k) {
+      var s = sigs[k];
+      if (!s || s.status !== 'cleared') return;
+      var url = s.signatureUrl;
+      if (!isValidStorageSignatureUrl(url)) return;   // data URLs are already inline
+      if (sigInlinedSrc[url]) return;
+      jobs.push(
+        new Promise(function (resolve) {
+          // Hard ceiling per image so one slow host cannot stall the print.
+          var settled = false;
+          var finish = function () { if (!settled) { settled = true; resolve(); } };
+          var ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+          var t = setTimeout(function () { if (ctrl) ctrl.abort(); finish(); }, SIG_PRINT_FETCH_TIMEOUT);
+          sigInlineOne(url, ctrl).then(
+            function () { clearTimeout(t); finish(); },
+            function (e) {
+              clearTimeout(t);
+              if (!(e && e.name === 'AbortError')) console.warn('Signature left as a remote URL:', e);
+              finish();
+            }
+          );
+        })
+      );
+    });
+    await Promise.all(jobs);
+  }
+
+  async function downloadClearance () {
     if (!currentUser || currentUser.type !== 'student') return;
     if (studentPrereqBlocked) {
       toast(studentPrereqMsg || 'Previous semester clearance must be resolved first.', 'error');
@@ -2683,6 +2813,11 @@
     var sigs = buildSignatures(studentClearanceRows);
     var p = progressOf(sigs);
     var allCleared = p.pct === 100;
+
+    // Pull any remote signature down into this document first, so the form we
+    // are about to write is not waiting on the network to finish drawing itself.
+    // Failure is tolerated - see sigResolveImagesForPrint.
+    await sigResolveImagesForPrint(sigs);
 
     // Verification payload: Control Number + formatted, human-readable
     // OFFICIAL VERIFICATION message, URL-encoded for the QR API.
@@ -2858,10 +2993,34 @@
       printed = true;
       w.print();
     }
+
+    // Wait for EVERY image in the print document to settle, not just the QR.
+    // The signature slots are images too, and a signature slot that has not
+    // painted yet prints as an empty box - a blank line on an official form,
+    // silently. Signatures are normally inlined by now, so these settle almost
+    // immediately; the QR is the one that can be genuinely slow.
+    var imgs = [];
+    try {
+      imgs = Array.prototype.slice.call(w.document.images || []);
+    } catch (e) { /* cross-origin or detached: fall through to the timers */ }
+
+    // Name the QR explicitly too. It is the one truly remote image on the form
+    // and it was waited for by id before this change; relying on document.images
+    // alone would silently drop that guarantee if the written document had not
+    // been parsed into the DOM yet.
     var qrImg = w.document.getElementById('clear-qr');
-    if (qrImg && !qrImg.complete) {
-      qrImg.onload = function () { setTimeout(doPrint, 150); };
-      setTimeout(doPrint, 2500); // fallback if the QR image is slow/offline
+    if (qrImg && imgs.indexOf(qrImg) === -1) imgs.push(qrImg);
+
+    var waiting = imgs.filter(function (im) { return im && !im.complete; });
+    if (waiting.length) {
+      var left = waiting.length;
+      var settled = function () { if (--left <= 0) setTimeout(doPrint, 150); };
+      waiting.forEach(function (im) {
+        im.addEventListener('load', settled, { once: true });
+        im.addEventListener('error', settled, { once: true });
+      });
+      // Hard ceiling: never let a stalled image hold the print hostage.
+      setTimeout(doPrint, 4000);
     } else {
       setTimeout(doPrint, 300);
     }

@@ -6,14 +6,15 @@
 -- transactional, and deletes no clearance history.
 --
 -- What this does:
---   1. Adds signatories.signature_url      — the signatory's CURRENT signature
---   2. Adds clearance_records.signature_url — the signature SNAPSHOT taken at the
---      moment of approval
---   3. Rewrites fn_approve_clearance so the approval and the signature snapshot
+--   1. Creates the public "signatures" Storage bucket that holds the images
+--   2. Adds signatories.signature_url      — the officer's CURRENT signature URL
+--   3. Adds clearance_records.signature_url — the signature URL SNAPSHOT taken at
+--      the moment of approval
+--   4. Rewrites fn_approve_clearance so the approval and the signature snapshot
 --      land in the SAME statement, server-side
---   4. Rewrites fn_flag_clearance so a requirement placed On Hold also drops its
+--   5. Rewrites fn_flag_clearance so a requirement placed On Hold also drops its
 --      signature (a hold is not a signed act)
---   5. Rebuilds v_clearance_details exposing the snapshot
+--   6. Rebuilds v_clearance_details exposing the snapshot
 --
 -- WHY THE SIGNATURE IS SNAPSHED ONTO THE CLEARANCE RECORD
 --   Storing the signature only on the signatory and reading it back at print
@@ -25,19 +26,33 @@
 --   approval time and the printable form reads the snapshot, never the live one.
 --
 -- STORAGE FORMAT
---   signature_url holds a data URL: "data:image/png;base64,....". This is
---   deliberate. A Supabase Storage bucket would need a public bucket plus storage
---   policies created through the dashboard, and the printable form is written
---   into a separate window via document.write() — a data URL renders there with
---   no network round-trip and no chance of a broken image on an official
---   document. Postgres TEXT is 1 GB, so the payload is not a storage concern.
+--   signature_url holds a PUBLIC URL into a Supabase Storage bucket:
+--     https://<project>.supabase.co/storage/v1/object/public/signatures/signatory-<uuid>.png
+--   The image bytes live in Storage, one object per officer, overwritten in
+--   place on re-save; the column and each clearance record carry only that short
+--   URL. Nothing large is stored in the database any more.
+--
+--   The bucket is PUBLIC on purpose. A private bucket would need short-lived
+--   signed URLs, and an official clearance form has to keep rendering when it is
+--   reprinted days later. The object key embeds the signatory's UUID, which is
+--   not published anywhere, so the image is not discoverable by guessing - only
+--   someone already holding the URL can fetch it. No Storage READ policy is
+--   needed for a public bucket, so this migration creates the bucket and
+--   nothing else.
+--
+--   A legacy base64 data URL is still accepted by the app: a signature saved
+--   before the move to Storage keeps rendering, and its next save converts it.
 --
 -- SAFETY NOTES
 --   * Nothing in clearance_records is UPDATEd or DELETEd except through the two
 --     RPCs, which only ever touch the active term's own row. The read-only
 --     history trigger from the academic-status migration stays in force.
---   * The CHECK constraints cap a stored signature at 400 000 characters
---     (~300 KB of PNG) so a runaway upload cannot bloat the row.
+--   * The CHECK constraints cap signature_url at 400 000 characters. A URL is
+--     ~150, so this is a runaway guard rather than a real limit - and the
+--     generous ceiling is what still lets a legacy base64 value stay valid.
+--   * The bucket itself is capped at 5 MB per object and accepts only PNG and
+--     JPEG, so even a client that skips the app's own 4 MB check cannot bloat
+--     storage.
 --   * A signatory with no signature on file can still approve. The approval
 --     succeeds and snapshots NULL; the printable form simply omits the image and
 --     leaves the signature line blank, exactly as it does today.
@@ -46,13 +61,80 @@
 BEGIN;
 
 -- -----------------------------------------------------------------------------
--- 1) Signature columns
+-- 1) The public "signatures" Storage bucket.
+--
+--    Best effort by design: the SQL editor's role is not guaranteed to be
+--    allowed to write storage.buckets, and this box has no dashboard access. If
+--    the insert cannot run, the rest of the migration still applies (the columns
+--    are what the app needs) and the WARNING below tells the operator exactly
+--    what to click. Saving a signature also names the bucket in its own error,
+--    so the app degrades to a clear message rather than a silent failure.
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE
+  v_have_storage boolean := false;
+  v_bucket       text    := 'signatures';
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema = 'storage' AND table_name = 'buckets')
+    INTO v_have_storage;
+
+  IF NOT v_have_storage THEN
+    RAISE WARNING 'storage schema not present (not a Supabase project?): skipping the "%" bucket.', v_bucket;
+    RETURN;
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = v_bucket) THEN
+    -- Already there. Make sure it is PUBLIC, because a private bucket would
+    -- make every saved signature fail to load on the printable form. The
+    -- report distinguishes "fine as it was" from "just repaired", so the
+    -- operator reading the SQL editor output is not misled into thinking
+    -- nothing was touched.
+    DECLARE
+      v_was_public boolean;
+    BEGIN
+      SELECT b.public INTO v_was_public FROM storage.buckets b WHERE b.id = v_bucket;
+
+      UPDATE storage.buckets
+         SET public = true,
+             file_size_limit = COALESCE(file_size_limit, 5242880),
+             allowed_mime_types = COALESCE(allowed_mime_types, ARRAY['image/png','image/jpeg'])
+       WHERE id = v_bucket;
+
+      IF v_was_public THEN
+        RAISE NOTICE 'Storage bucket "%" already exists and is public.', v_bucket;
+      ELSE
+        RAISE WARNING 'Storage bucket "%" existed but was PRIVATE - it is now public. '
+                      'A private bucket would have made every saved signature fail to load '
+                      'on the printable form.', v_bucket;
+      END IF;
+    END;
+    RETURN;
+  END IF;
+
+  BEGIN
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    VALUES (v_bucket, v_bucket, true, 5242880, ARRAY['image/png','image/jpeg'])
+    ON CONFLICT (id) DO NOTHING;
+    RAISE NOTICE 'Created public storage bucket "%" (5 MB cap, PNG/JPEG only).', v_bucket;
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE WARNING
+      'Could not create the "%" storage bucket (%). Create it in the dashboard: '
+      'Storage -> New bucket -> name it "%" -> tick "Public bucket". '
+      'Signature saving will report this until it exists.',
+      v_bucket, SQLERRM, v_bucket;
+  END;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- 2) Signature columns
 -- -----------------------------------------------------------------------------
 ALTER TABLE signatories    ADD COLUMN IF NOT EXISTS signature_url TEXT;
 ALTER TABLE clearance_records ADD COLUMN IF NOT EXISTS signature_url TEXT;
 
 -- -----------------------------------------------------------------------------
--- 2) Size guards.
+-- 3) Size guards.
 --    A trimmed signature PNG lands around 5-40 KB of base64; the 400 000 char
 --    cap is roughly 10x headroom while still refusing an unbounded payload.
 -- -----------------------------------------------------------------------------
@@ -70,7 +152,7 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 3) fn_approve_clearance — approval and signature snapshot in one statement.
+-- 4) fn_approve_clearance — approval and signature snapshot in one statement.
 --
 --    The signature is read from the signatory row INSIDE the RPC rather than
 --    being passed in by the browser. That keeps the snapshot atomic with the
@@ -100,7 +182,7 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 4) fn_flag_clearance — a requirement put On Hold carries no signature.
+-- 5) fn_flag_clearance — a requirement put On Hold carries no signature.
 --    The record keeps signed_by (who raised the hold) but drops signed_at and
 --    the signature image, so nothing can render a signature over a hold.
 -- -----------------------------------------------------------------------------
@@ -126,7 +208,7 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- 5) v_clearance_details — expose the snapshot.
+-- 6) v_clearance_details — expose the snapshot.
 --
 --    DROP + CREATE rather than CREATE OR REPLACE so the output is identical no
 --    matter which earlier migrations ran. Every column the academic-status

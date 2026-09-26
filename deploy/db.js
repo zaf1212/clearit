@@ -347,26 +347,122 @@ var DB = (function () {
 
   // ── Signatory: save / clear their own digital signature ────────────────
   //
-  // Stores a PNG data URL (e.g. "data:image/png;base64,...") in
-  // signatories.signature_url. The approval RPCs copy this onto the clearance
-  // record at approval time, so changing it here never rewrites an approval that
-  // has already happened.
+  // The image itself lives in Supabase Storage; the database only ever holds the
+  // short public URL. The approval RPCs copy that URL onto the clearance record
+  // at approval time, so changing it here never rewrites an approval that has
+  // already happened.
   //
-  // A direct record update is the exact equivalent of what
-  // changeSignatoryPassword does for this architecture, and it is scoped to the
-  // signed-in officer's own row by the caller's UUID. A database without the
-  // column fails with a 40001/42703, which is turned into an actionable message
-  // rather than a raw PostgREST error.
-  async function setSignatorySignature (signatoryUUID, dataUrl) {
+  // WHY A STABLE PER-OFFICER PATH INSTEAD OF signature_<id>_<Date.now()>.png
+  //   A timestamped name writes a brand new object on every single save, so the
+  //   previous file is orphaned forever with no reference to it, and "remove my
+  //   signature" has no way to know which object to delete. One stable object per
+  //   officer, written with upsert:true, means re-saving overwrites in place:
+  //   no orphans, and removal is just a known path. It also means the public URL
+  //   recorded on a clearance never changes, so a snapshot taken at approval
+  //   time keeps resolving even after the officer re-draws.
+  //
+  // PRIVACY NOTE
+  //   The bucket is public, because a private one would need short-lived signed
+  //   URLs and an official clearance form has to keep rendering when it is
+  //   reprinted later. The object path contains the signatory's UUID, which is
+  //   not published anywhere, so a signature image is not discoverable by
+  //   guessing - only someone who already holds the URL can fetch it.
+  var SIG_BUCKET = 'signatures';
+
+  function sigStoragePath (signatoryUUID) {
+    return 'signatory-' + signatoryUUID + '.png';
+  }
+
+  // Turns "data:image/png;base64,...." into the bytes to upload, keeping the
+  // real media type so the object is stored with a truthful Content-Type. The
+  // drawing canvas and the upload path both funnel through a canvas, so this is
+  // virtually always PNG, but the type is read rather than assumed.
+  function sigDataUrlToBlob (dataUrl) {
+    var m = /^data:(image\/(?:png|jpeg|jpg));base64,([A-Za-z0-9+/]+={0,2})$/.exec(String(dataUrl || ''));
+    if (!m) throw new Error('That image could not be read. Please try again.');
+    var bin;
+    try { bin = atob(m[2]); } catch (e) { throw new Error('That image could not be read. Please try again.'); }
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return { blob: new Blob([bytes], { type: m[1] }), contentType: m[1] };
+  }
+
+  // Storage failures are worth naming, because the two realistic causes are a
+  // bucket that was never created and a policy that forbids the upload - and
+  // neither is something the officer can fix by redrawing their signature.
+  function sigStorageError (error, fallback) {
+    var msg = String((error && (error.message || error.statusText || error.error_description)) || '');
+    if (/bucket not found|404/i.test(msg)) {
+      return new Error('The "signatures" storage bucket does not exist yet. Run clearit_signature_migration.sql, or create a public bucket named "signatures" in the Supabase dashboard.');
+    }
+    if (/row-level security|not authorized|permission|new row violates|401|403/i.test(msg)) {
+      return new Error('Your account is not allowed to store signature images. Check the storage policies on the "signatures" bucket.');
+    }
+    return friendlyError(error, fallback);
+  }
+
+  // Scoped to the signed-in officer's own row by the caller's UUID, exactly as
+  // changeSignatoryPassword is. A database without the column fails with a
+  // 40001/42703, which is turned into an actionable message rather than a raw
+  // PostgREST error.
+  //
+  // Returns the stored public URL so the caller can show what was actually saved
+  // instead of assuming the staged bytes are what ended up in the database.
+  async function saveSignatorySignature (signatoryUUID, dataUrl) {
+    var decoded = sigDataUrlToBlob(dataUrl);
+    var bucket = window.supabase.storage.from(SIG_BUCKET);
+    var path = sigStoragePath(signatoryUUID);
+
+    var up = await bucket.upload(path, decoded.blob, {
+      contentType: decoded.contentType,
+      upsert: true
+    });
+    if (up.error) throw sigStorageError(up.error, 'Could not upload your signature');
+
+    // getPublicUrl is synchronous in supabase-js v2 - it only builds the URL, it
+    // does not hit the network.
+    var pub = bucket.getPublicUrl(path);
+    var publicUrl = pub && pub.data && pub.data.publicUrl;
+    if (!publicUrl) {
+      throw new Error('Could not work out where the signature was saved. Please try again.');
+    }
+
     var { error } = await window.supabase
       .from('signatories')
-      .update({ signature_url: dataUrl })
+      .update({ signature_url: publicUrl })
+      .eq('id', signatoryUUID);
+    if (error) {
+      // The object stays put on purpose. Its path is stable, so the next save
+      // overwrites it rather than orphaning it, and deleting it here would
+      // destroy the officer's PREVIOUS signature, which this very URL may still
+      // be serving on clearances they have already approved.
+      if (/signature_url|column/i.test(error.message || '')) {
+        throw new Error('Signature storage is not set up on this database yet. Please run clearit_signature_migration.sql.');
+      }
+      throw friendlyError(error, 'Could not save your signature');
+    }
+    return publicUrl;
+  }
+
+  async function clearSignatorySignature (signatoryUUID) {
+    // Best effort: the goal is "no signature on file", and a leftover object is
+    // harmless because the next save overwrites the same stable path.
+    try {
+      var rm = await window.supabase.storage.from(SIG_BUCKET).remove([sigStoragePath(signatoryUUID)]);
+      if (rm && rm.error) console.warn('Signature object not removed:', rm.error);
+    } catch (e) {
+      console.warn('Signature object not removed:', e);
+    }
+
+    var { error } = await window.supabase
+      .from('signatories')
+      .update({ signature_url: null })
       .eq('id', signatoryUUID);
     if (error) {
       if (/signature_url|column/i.test(error.message || '')) {
         throw new Error('Signature storage is not set up on this database yet. Please run clearit_signature_migration.sql.');
       }
-      throw friendlyError(error, 'Could not save your signature');
+      throw friendlyError(error, 'Could not remove your signature');
     }
     return true;
   }
@@ -759,7 +855,10 @@ var DB = (function () {
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,
-    setSignatorySignature:   setSignatorySignature,
+    saveSignatorySignature:  saveSignatorySignature,
+    clearSignatorySignature: clearSignatorySignature,
+    SIG_BUCKET:              SIG_BUCKET,
+    sigStoragePath:          sigStoragePath,
     findStudentByInstitutionalId: findStudentByInstitutionalId,
     sendPasswordResetEmail: sendPasswordResetEmail,
     resetPasswordChangeCount: resetPasswordChangeCount,
