@@ -160,7 +160,7 @@ AS $$
 DECLARE
   v_count INTEGER;
 BEGIN
-  fn_assert_term(p_semester, p_academic_year);
+  PERFORM fn_assert_term(p_semester, p_academic_year);
   -- Auth is enforced whenever a caller identifies itself; the check is skipped
   -- only for legacy/internal calls that pass NULL.
   IF p_sas_email IS NOT NULL THEN
@@ -221,7 +221,7 @@ DECLARE
   v_cohort        UUID[];
 BEGIN
   PERFORM fn_assert_sas(p_sas_email);
-  fn_assert_term(p_semester, p_academic_year);
+  PERFORM fn_assert_term(p_semester, p_academic_year);
 
   IF p_mode IS NULL OR p_mode NOT IN ('roll_forward', 'custom') THEN
     RAISE EXCEPTION 'Invalid roster mode. Use roll_forward or custom.';

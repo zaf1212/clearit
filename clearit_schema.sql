@@ -473,7 +473,7 @@ ALTER TABLE students ALTER COLUMN academic_status SET DEFAULT 'Active';
 DO $$
 BEGIN
   IF EXISTS (SELECT 1 FROM students WHERE academic_status IS NULL) THEN
-    RAISE EXCEPTION 'Could not normalize students.academic_status â€” aborting.';
+    RAISE EXCEPTION 'Could not normalize students.academic_status — aborting.';
   END IF;
 END;
 $$;
@@ -490,7 +490,7 @@ END;
 $$;
 CREATE INDEX IF NOT EXISTS idx_students_academic_status ON students (academic_status);
 -- -----------------------------------------------------------------------------
--- 2) Year Level + Section/Block (idempotent â€” safe if the earlier migration ran)
+-- 2) Year Level + Section/Block (idempotent — safe if the earlier migration ran)
 -- -----------------------------------------------------------------------------
 ALTER TABLE students ADD COLUMN IF NOT EXISTS year_level    TEXT;
 ALTER TABLE students ADD COLUMN IF NOT EXISTS section_block TEXT;
@@ -547,7 +547,7 @@ AS $$
      AND p_enrollment_status IN ('Regular', 'Irregular');
 $$;
 -- -----------------------------------------------------------------------------
--- 3) fn_init_clearance â€” now status-aware, optional custom roster
+-- 3) fn_init_clearance — now status-aware, optional custom roster
 --
 --    Dropped / Suspended / Graduated / Inactive students are skipped, so they
 --    can never be initialized into a new term. Existing rows for the target
@@ -568,7 +568,7 @@ AS $$
 DECLARE
   v_count INTEGER;
 BEGIN
-  fn_assert_term(p_semester, p_academic_year);
+  PERFORM fn_assert_term(p_semester, p_academic_year);
   -- Auth is enforced whenever a caller identifies itself; the check is skipped
   -- only for legacy/internal calls that pass NULL.
   IF p_sas_email IS NOT NULL THEN
@@ -588,7 +588,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 4) fn_init_new_term â€” the SAS Director "Initialize New Semester" wizard
+-- 4) fn_init_new_term — the SAS Director "Initialize New Semester" wizard
 --
 --    p_mode = 'roll_forward' : carry every Active student into the new term,
 --                               stamping their semester tags and optionally
@@ -626,7 +626,7 @@ DECLARE
   v_cohort        UUID[];
 BEGIN
   PERFORM fn_assert_sas(p_sas_email);
-  fn_assert_term(p_semester, p_academic_year);
+  PERFORM fn_assert_term(p_semester, p_academic_year);
   IF p_mode IS NULL OR p_mode NOT IN ('roll_forward', 'custom') THEN
     RAISE EXCEPTION 'Invalid roster mode. Use roll_forward or custom.';
   END IF;
@@ -685,7 +685,7 @@ BEGIN
     -- year digit ("BSIT 2-A") are bumped in step so the two stay consistent.
     IF p_promote THEN
       -- 1) bump the year level: 1st -> 2nd -> 3rd -> 4th.
-      --    4th Year is left alone â€” retiring them is the SAS Director's call
+      --    4th Year is left alone — retiring them is the SAS Director's call
       --    (flip them to 'Graduated' from Manage Students).
       UPDATE students
       SET year_level = CASE year_level
@@ -769,7 +769,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 5) fn_apply_roster_upload â€” apply a CSV roster row by row
+-- 5) fn_apply_roster_upload — apply a CSV roster row by row
 --
 --    p_rows: JSONB array of objects, each optionally carrying
 --      { "institutional_id": "...", "full_name": "...",
@@ -819,7 +819,7 @@ BEGIN
     v_status := NULLIF(btrim(v_row ->> 'academic_status'), '');
     IF v_status IS NOT NULL THEN
       IF v_status NOT IN ('Active','Dropped','Suspended','Graduated','Inactive') THEN
-        RAISE EXCEPTION 'Invalid academic status "%" for student % â€” use Active, Dropped, Suspended, Graduated, or Inactive.', v_status, v_iid;
+        RAISE EXCEPTION 'Invalid academic status "%" for student % — use Active, Dropped, Suspended, Graduated, or Inactive.', v_status, v_iid;
       END IF;
     END IF;
     v_year    := NULLIF(btrim(v_row ->> 'year_level'), '');
@@ -849,7 +849,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 6) fn_set_student_academic_status â€” quick status toggles from Manage Students
+-- 6) fn_set_student_academic_status — quick status toggles from Manage Students
 --
 --    Changing a status never rewrites history: existing clearance_records for
 --    the current or any past term are left exactly as they are. A student
