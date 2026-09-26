@@ -604,12 +604,17 @@ CREATE OR REPLACE FUNCTION fn_init_new_term(
   p_semester      TEXT,
   p_academic_year TEXT,
   p_mode          TEXT,
+  -- p_sas_email must be declared BEFORE the first parameter that has a DEFAULT:
+  -- Postgres rejects a signature where a non-defaulted parameter follows a
+  -- defaulted one (42P13). It is deliberately kept mandatory so the call fails at
+  -- the signature rather than relying on fn_assert_sas to catch a NULL. The app
+  -- calls this by parameter name over PostgREST, so the order is not significant.
+  p_sas_email     TEXT,
   p_student_ids   UUID[] DEFAULT NULL,
   p_promote       BOOLEAN DEFAULT false,
   p_year_level    TEXT    DEFAULT NULL,
   p_section_block TEXT    DEFAULT NULL,
-  p_activate      BOOLEAN DEFAULT true,
-  p_sas_email     TEXT
+  p_activate      BOOLEAN DEFAULT true
 ) RETURNS JSONB
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
 AS $$
