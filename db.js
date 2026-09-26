@@ -141,9 +141,11 @@ var DB = (function () {
 
   // ── Students with clearance for one semester (signatory dashboard) ─────
   async function getAllStudentClearance (semester, academicYear) {
-    // Try with the migrated year_level / section_block columns first, then
-    // fall back to the pre-migration shape (year/section derived from year_block).
+    // Try with the migrated academic_status / year_level / section_block columns
+    // first, then fall back through progressively older view shapes so the app
+    // keeps working before clearit_academic_status_migration.sql has been run.
     var attempts = [
+      'student_id, institutional_id, student_name, year_block, program, academic_status, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
       'student_id, institutional_id, student_name, year_block, program, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
       'student_id, institutional_id, student_name, year_block, program, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name'
     ];
@@ -161,6 +163,7 @@ var DB = (function () {
       var parts = splitYearBlock(r.year_block);
       r.yearLevel = r.year_level || parts.yearLevel;
       r.sectionBlock = r.section_block || parts.sectionBlock;
+      r.academicStatus = r.academic_status || 'Active';
       return r;
     });
   }
@@ -173,8 +176,10 @@ var DB = (function () {
   // (or the view columns) don't exist yet.
   async function getStudentsForSemester (semester, academicYear) {
     var attempts = [
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, academic_status, year_level, section_block' },
       { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, year_level, section_block' },
       { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, academic_status, year_level, section_block' },
       { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, year_level, section_block' },
       { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program' }
     ];
@@ -194,6 +199,7 @@ var DB = (function () {
       return {
         student_id: r[usedIdKey], institutional_id: r.institutional_id,
         full_name: r.full_name, year_block: r.year_block, program: r.program,
+        academicStatus: r.academic_status || 'Active',
         yearLevel: r.year_level || parts.yearLevel,
         sectionBlock: r.section_block || parts.sectionBlock
       };
@@ -203,12 +209,25 @@ var DB = (function () {
   // ── Stamp ALL ACTIVE students with the newly initialized term ───────────
   // Called right before/after fn_init_clearance so every active (Regular /
   // Irregular) student's semester + academic_year match the new term.
+  // Dropped / Suspended / Graduated / Inactive students are left on their old
+  // term tags, so they never look like part of the new roster. Falls back to
+  // the pre-migration shape if academic_status has not been added yet.
   async function updateActiveStudentsSemester (semester, academicYear) {
-    var { error } = await window.supabase
-      .from('students')
-      .update({ semester: semester, academic_year: academicYear })
-      .in('enrollment_status', ['Regular', 'Irregular']);
-    if (error) throw friendlyError(error, 'Could not update student semester tags');
+    var attempts = [
+      function (q) { return q.eq('academic_status', 'Active'); },
+      function (q) { return q; }
+    ];
+    var lastErr = null, done = false;
+    for (var i = 0; i < attempts.length && !done; i++) {
+      var q = window.supabase
+        .from('students')
+        .update({ semester: semester, academic_year: academicYear })
+        .in('enrollment_status', ['Regular', 'Irregular']);
+      var r = await attempts[i](q);
+      if (!r.error) done = true;
+      else lastErr = r.error;
+    }
+    if (!done) throw friendlyError(lastErr, 'Could not update student semester tags');
   }
 
   // ── Distinct (semester, academic_year) pairs that exist ────────────────
@@ -242,9 +261,9 @@ var DB = (function () {
   // migrated columns when present, otherwise split from year_block.
   async function getAllStudents () {
     var attempts = [
+      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, academic_status, paid, paid_date, password_change_count, year_level, section_block',
       'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count, year_level, section_block',
-      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count',
-      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date'
+      'id, institutional_id, full_name, email, year_block, program, semester, academic_year, enrollment_status, paid, paid_date, password_change_count'
     ];
     var rows = null, lastErr = null;
     for (var i = 0; i < attempts.length; i++) {
@@ -258,6 +277,9 @@ var DB = (function () {
       var parts = splitYearBlock(s.year_block);
       s.yearLevel = s.year_level || parts.yearLevel;
       s.sectionBlock = s.section_block || parts.sectionBlock;
+      // Pre-migration databases have no academic_status column; treat the
+      // whole roster as Active so the status UI degrades gracefully.
+      s.academicStatus = s.academic_status || 'Active';
       return s;
     });
   }
@@ -382,20 +404,91 @@ var DB = (function () {
 
   // ── Starting a new semester cycle: initialize clearances for ACTIVE students
   // Optional p_year_level / p_section_block narrow the batch to a specific
-  // Year Level and/or Section (requires the year/section DB migration; the
-  // 2-argument call keeps working on pre-migration databases).
-  async function initializeClearance (semester, academicYear, yearLevel, sectionBlock) {
+  // Year Level and/or Section; p_student_ids narrows it to an explicit roster.
+  // Students whose academic_status is Dropped / Suspended / Graduated /
+  // Inactive are skipped by the RPC, so they are never initialized.
+  // The 2-argument call keeps working on pre-migration databases.
+  async function initializeClearance (semester, academicYear, yearLevel, sectionBlock, studentIds, sasEmail) {
     var params = { p_semester: semester, p_academic_year: academicYear };
     if (yearLevel)    params.p_year_level = yearLevel;
     if (sectionBlock) params.p_section_block = sectionBlock;
+    if (studentIds && studentIds.length) params.p_student_ids = studentIds;
+    if (sasEmail) params.p_sas_email = sasEmail;
     var { data, error } = await window.supabase.rpc('fn_init_clearance', params);
     if (error) {
-      if (yearLevel || sectionBlock) {
-        throw friendlyError(error, 'Year/Section filtering requires the database migration — run clearit_year_section_migration.sql in the Supabase SQL editor');
+      if (yearLevel || sectionBlock || (studentIds && studentIds.length)) {
+        throw friendlyError(error, 'Year/Section filtering requires the database migration — run clearit_academic_status_migration.sql in the Supabase SQL editor');
       }
       throw friendlyError(error, 'Could not initialize clearance records');
     }
     return data || 0;
+  }
+
+  // ── SAS Director: one-call "Initialize New Semester" wizard ──────────────
+  // opts: { semester, academicYear, mode: 'roll_forward'|'custom',
+  //         studentIds: [], promote: bool, yearLevel, sectionBlock,
+  //         activate: bool, sasEmail }
+  // Runs entirely inside the database in a single transaction and returns a
+  // JSONB breakdown. Never updates or deletes existing clearance history.
+  async function initNewTerm (opts) {
+    var params = {
+      p_semester:      opts.semester,
+      p_academic_year: opts.academicYear,
+      p_mode:          opts.mode,
+      p_promote:       !!opts.promote,
+      p_activate:      opts.activate !== false,
+      p_sas_email:     opts.sasEmail
+    };
+    if (opts.studentIds && opts.studentIds.length) params.p_student_ids = opts.studentIds;
+    if (opts.yearLevel)                       params.p_year_level    = opts.yearLevel;
+    if (opts.sectionBlock)                     params.p_section_block = opts.sectionBlock;
+
+    var { data, error } = await window.supabase.rpc('fn_init_new_term', params);
+    if (error) {
+      throw friendlyError(error, isMigrationMissing(error)
+        ? 'Term initialization needs the database migration — run clearit_academic_status_migration.sql in the Supabase SQL editor'
+        : 'Could not initialize the new term');
+    }
+    return data || {};
+  }
+
+  // ── SAS Director: apply an uploaded CSV roster row by row ───────────────
+  // rows: [{ institutional_id, academic_status, year_level, section_block }]
+  async function applyRosterUpload (rows, sasEmail) {
+    var { data, error } = await window.supabase.rpc('fn_apply_roster_upload', {
+      p_rows:      rows,
+      p_sas_email: sasEmail
+    });
+    if (error) {
+      throw friendlyError(error, isMigrationMissing(error)
+        ? 'CSV roster upload needs the database migration — run clearit_academic_status_migration.sql in the Supabase SQL editor'
+        : 'Could not apply the uploaded roster');
+    }
+    return data || {};
+  }
+
+  // ── SAS Director: quick status toggles (Dropped / Suspended / ...) ─────
+  async function setStudentAcademicStatus (studentIds, academicStatus, sasEmail) {
+    var { data, error } = await window.supabase.rpc('fn_set_student_academic_status', {
+      p_student_ids:     studentIds,
+      p_academic_status: academicStatus,
+      p_sas_email:       sasEmail
+    });
+    if (error) {
+      throw friendlyError(error, isMigrationMissing(error)
+        ? 'Changing student status needs the database migration — run clearit_academic_status_migration.sql in the Supabase SQL editor'
+        : 'Could not change the student status');
+    }
+    return data || 0;
+  }
+
+  // Supabase reports a missing RPC as "function ... does not exist" (code
+  // 42883 / PGRST202). Detect that so the UI can point at the migration file
+  // instead of showing a raw database error.
+  function isMigrationMissing (error) {
+    if (!error) return false;
+    var msg = String(error.message || '');
+    return /does not exist|not found|42883|PGRST202|schema cache/i.test(msg);
   }
 
   // ── Semester management (SAS Director access is enforced inside the RPCs) ──
@@ -594,6 +687,9 @@ var DB = (function () {
     sendPasswordResetEmail: sendPasswordResetEmail,
     resetPasswordChangeCount: resetPasswordChangeCount,
     initializeClearance:    initializeClearance,
+    initNewTerm:            initNewTerm,
+    applyRosterUpload:      applyRosterUpload,
+    setStudentAcademicStatus: setStudentAcademicStatus,
     approveClearance:       approveClearance,
     flagClearance:          flagClearance,
     autoApprovePresident:   autoApprovePresident,

@@ -733,7 +733,7 @@
           <!-- Main panel -->
           <div id="sm-main-panel" class="px-6 py-5 space-y-6">
 
-            <!-- Create / Initialize New Semester -->
+            <!-- Create / Initialize New Semester — 3-step wizard -->
             <section class="rounded-2xl border border-amber-200 bg-amber-50/50 p-5">
               <div class="flex items-center gap-2 mb-1">
                 <span class="w-8 h-8 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
@@ -742,48 +742,211 @@
                 <h4 class="font-bold text-slate-800">Create / Initialize New Semester</h4>
               </div>
               <p class="text-xs text-slate-500 mt-2 mb-4 leading-relaxed">
-                Creates a semester entry, then generates <b>10 pending clearance records</b> for
-                <b>every active student</b> across all signatory offices. Previously initialized
-                semesters are skipped, so nothing is duplicated.
+                Creates the semester and generates <b>10 pending clearance records</b> per enrolled
+                student. Students marked <b>Dropped</b>, <b>Suspended</b>, <b>Graduated</b> or
+                <b>Inactive</b> are always skipped, and clearance history from earlier terms is
+                never modified.
               </p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label for="sm-ay" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Academic Year</label>
-                  <input id="sm-ay" type="text" placeholder="e.g. 2026-2027"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+
+              <!-- Stepper -->
+              <ol class="flex items-center gap-2 mb-5" id="sm-steps">
+                <li data-sm-step="1" class="flex-1">
+                  <div class="h-1.5 rounded-full bg-amber-500"></div>
+                  <p class="text-[11px] font-bold uppercase tracking-wide text-amber-700 mt-1.5">1 &middot; Term</p>
+                </li>
+                <li data-sm-step="2" class="flex-1">
+                  <div class="h-1.5 rounded-full bg-slate-200"></div>
+                  <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mt-1.5">2 &middot; Roster</p>
+                </li>
+                <li data-sm-step="3" class="flex-1">
+                  <div class="h-1.5 rounded-full bg-slate-200"></div>
+                  <p class="text-[11px] font-bold uppercase tracking-wide text-slate-400 mt-1.5">3 &middot; Review &amp; Initialize</p>
+                </li>
+              </ol>
+
+              <!-- ── STEP 1 · Term details ── -->
+              <div id="sm-wiz-1">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label for="sm-ay" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Academic Year</label>
+                    <input id="sm-ay" type="text" placeholder="e.g. 2026-2027"
+                      class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label for="sm-semester" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Semester</label>
+                    <select id="sm-semester" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
+                      <option value="1st Semester">1st Semester</option>
+                      <option value="2nd Semester">2nd Semester</option>
+                      <option value="Summer / Midyear">Summer / Midyear</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label for="sm-semester" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Semester</label>
-                  <select id="sm-semester" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
-                    <option value="1st Semester">1st Semester</option>
-                    <option value="2nd Semester">2nd Semester</option>
-                    <option value="Summer / Midyear">Summer / Midyear</option>
-                  </select>
+                <div class="flex justify-end mt-4">
+                  <button id="sm-wiz-1-next" type="button" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition">
+                    Continue
+                  </button>
                 </div>
               </div>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label for="sm-init-year" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level (optional)</label>
-                  <select id="sm-init-year" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
-                    <option value="">All Year Levels</option>
-                    <option>1st Year</option>
-                    <option>2nd Year</option>
-                    <option>3rd Year</option>
-                    <option>4th Year</option>
-                  </select>
+
+              <!-- ── STEP 2 · Roster mode ── -->
+              <div id="sm-wiz-2" class="hidden">
+                <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">How should this term's roster be built?</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+
+                  <label for="sm-mode-roll" class="block cursor-pointer">
+                    <input type="radio" name="sm-mode" id="sm-mode-roll" value="roll_forward" checked class="sr-only" />
+                    <div class="h-full rounded-xl border-2 border-slate-200 bg-white p-4 transition hover:border-amber-300 sm-mode-card">
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <span class="w-7 h-7 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/></svg>
+                        </span>
+                        <span class="font-bold text-slate-800 text-sm">Roll Forward Active Roster</span>
+                      </div>
+                      <p class="text-[11px] text-slate-500 leading-relaxed">
+                        Carries every <b class="text-emerald-700">Active</b> student into the new term
+                        and creates their 10 pending records. Dropped, Suspended, Graduated and
+                        Inactive students are skipped automatically.
+                      </p>
+                    </div>
+                  </label>
+
+                  <label for="sm-mode-custom" class="block cursor-pointer">
+                    <input type="radio" name="sm-mode" id="sm-mode-custom" value="custom" class="sr-only" />
+                    <div class="h-full rounded-xl border-2 border-slate-200 bg-white p-4 transition hover:border-amber-300 sm-mode-card">
+                      <div class="flex items-center gap-2 mb-1.5">
+                        <span class="w-7 h-7 rounded-lg bg-navy-50 text-navy-700 flex items-center justify-center shrink-0">
+                          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                        </span>
+                        <span class="font-bold text-slate-800 text-sm">Upload / Custom Roster</span>
+                      </div>
+                      <p class="text-[11px] text-slate-500 leading-relaxed">
+                        Upload a <b>CSV roster</b> to set each student's status, year and section, or
+                        just pick a <b>Year Level / Section</b> to enroll. Everyone else is left alone.
+                      </p>
+                    </div>
+                  </label>
+
                 </div>
-                <div>
-                  <label for="sm-init-section" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Section / Block (optional)</label>
-                  <input id="sm-init-section" type="text" list="section-options" placeholder="e.g. BSIT 1-A — blank = all sections"
-                    class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+                <div class="flex justify-between gap-2 mt-4">
+                  <button id="sm-wiz-2-back" type="button" class="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">
+                    Back
+                  </button>
+                  <button id="sm-wiz-2-next" type="button" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition">
+                    Continue
+                  </button>
                 </div>
               </div>
-              <p class="text-[11px] text-slate-400 mb-4">Leave both blank to initialize <b>all active students</b>. Year / Section filtering requires the database migration (<code>clearit_year_section_migration.sql</code>).</p>
-              <div id="sm-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
-              <button id="sm-init-btn" data-orig-text="Initialize Clearance for All Active Students" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition whitespace-nowrap">
-                <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                Initialize Clearance for All Active Students
-              </button>
+
+              <!-- ── STEP 3 · Review & initialize ── -->
+              <div id="sm-wiz-3" class="hidden">
+
+                <!-- Roll-forward options -->
+                <div id="sm-roll-opts">
+                  <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Current roster by status</p>
+                  <div id="sm-status-census" class="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4"></div>
+
+                  <label for="sm-promote" class="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-white p-3.5 cursor-pointer">
+                    <input type="checkbox" id="sm-promote" class="mt-0.5 accent-amber-600" />
+                    <span>
+                      <span class="block text-sm font-bold text-slate-800">Promote continuing students one year</span>
+                      <span class="block text-[11px] text-slate-500 leading-relaxed mt-0.5">
+                        1st &rarr; 2nd, 2nd &rarr; 3rd, 3rd &rarr; 4th. Section names that embed the year
+                        (e.g. <code>BSIT 2-A</code>) are bumped in step. 4th Year students are left as
+                        they are &mdash; mark them <b>Graduated</b> from Manage Students.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+
+                <!-- Custom roster options -->
+                <div id="sm-custom-opts" class="hidden">
+                  <!-- Source picker (CSV vs. Year/Section) -->
+                  <div class="flex gap-2 mb-3.5" role="tablist" aria-label="Custom roster source">
+                    <button id="sm-src-csv" type="button" aria-selected="true"
+                      class="rounded-lg px-3 py-1.5 text-xs font-bold border transition bg-navy-50 text-navy-700 border-navy-200">
+                      CSV Roster
+                    </button>
+                    <button id="sm-src-filter" type="button" aria-selected="false"
+                      class="rounded-lg px-3 py-1.5 text-xs font-bold border transition bg-white text-slate-500 border-slate-200 hover:bg-slate-50">
+                      By Year / Section
+                    </button>
+                  </div>
+
+                  <!-- CSV tab -->
+                  <div id="sm-tab-csv">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Upload CSV roster</p>
+                    <div class="rounded-xl border border-slate-200 bg-white p-3.5">
+                      <div class="flex flex-col sm:flex-row gap-2 mb-3">
+                        <input id="sm-csv-file" type="file" accept=".csv,text/csv"
+                          class="flex-1 min-w-0 text-xs text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-navy-700 file:px-3 file:py-2 file:text-xs file:font-bold file:text-white hover:file:bg-navy-800 cursor-pointer" />
+                        <button id="sm-csv-parse" type="button" class="rounded-lg bg-navy-700 px-4 py-2 text-sm font-bold text-white shadow-sm shadow-navy-700/20 hover:bg-navy-800 transition whitespace-nowrap">
+                          Parse CSV
+                        </button>
+                      </div>
+                      <details class="text-[11px] text-slate-500">
+                        <summary class="cursor-pointer font-semibold text-slate-600 hover:text-slate-800">Expected format / paste CSV instead</summary>
+                        <p class="mt-2 leading-relaxed">
+                          Header row required. Only <code>institutional_id</code> is mandatory; the
+                          other columns are optional and blank values leave the student unchanged.
+                        </p>
+                        <pre class="mt-2 p-2 rounded-lg bg-slate-50 border border-slate-200 overflow-x-auto text-[10px] leading-relaxed">institutional_id,academic_status,year_level,section_block
+2026-1001,Active,2nd Year,BSIT 2-A
+2026-1002,Dropped,,
+2026-1003,Suspended,3rd Year,BSIT 3-B</pre>
+                        <textarea id="sm-csv-text" rows="4" placeholder="Paste CSV here&hellip;"
+                          class="mt-2 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-mono focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none"></textarea>
+                      </details>
+                      <div id="sm-csv-preview" class="hidden mt-3"></div>
+                    </div>
+                  </div>
+
+                  <!-- Year/Section tab -->
+                  <div id="sm-tab-filter" class="hidden">
+                    <p class="text-xs font-semibold uppercase tracking-wide text-slate-500 mb-2">Select students by Year Level / Section</p>
+                    <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label for="sm-cust-year" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level</label>
+                        <select id="sm-cust-year" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
+                          <option value="">All Year Levels</option>
+                          <option>1st Year</option>
+                          <option>2nd Year</option>
+                          <option>3rd Year</option>
+                          <option>4th Year</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label for="sm-cust-section" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Section / Block</label>
+                        <input id="sm-cust-section" type="text" list="section-options" placeholder="blank = all sections"
+                          class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none" />
+                      </div>
+                      <div>
+                        <label for="sm-cust-promote" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Promotion</label>
+                        <select id="sm-cust-promote" class="w-full rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm focus:border-amber-600 focus:ring-2 focus:ring-amber-600/20 focus:outline-none">
+                          <option value="no">Keep current year</option>
+                          <option value="yes">Promote one year</option>
+                        </select>
+                      </div>
+                    </div>
+                    <div id="sm-custom-preview" class="mt-2.5"></div>
+                    <p class="text-[11px] text-slate-500 mt-2.5 leading-relaxed">
+                      Only <b>Active</b> students are enrolled. To change anyone's status, use the
+                      CSV tab or the quick toggles in <b>Manage Students</b>.
+                    </p>
+                  </div>
+                </div>
+
+                <div id="sm-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
+
+                <div class="flex justify-between gap-2 mt-4">
+                  <button id="sm-wiz-3-back" type="button" class="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">
+                    Back
+                  </button>
+                  <button id="sm-init-btn" data-orig-text="Initialize This Term" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition whitespace-nowrap">
+                    <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                    Initialize This Term
+                  </button>
+                </div>
+              </div>
             </section>
 
             <!-- Semester list -->
@@ -995,7 +1158,7 @@
   <div id="admin-modal" class="hidden fixed inset-0 z-50">
     <div id="admin-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
     <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-4xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+      <div class="fade-in w-full max-w-6xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1032,22 +1195,30 @@
 
           <!-- Student table -->
           <div class="px-6 pb-4">
-            <table class="w-full text-sm">
-              <thead>
-                <tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
-                  <th class="pb-2 font-semibold">Student ID</th>
-                  <th class="pb-2 font-semibold">Full Name</th>
-                  <th class="pb-2 font-semibold">Email</th>
-                  <th class="pb-2 font-semibold">Year / Block</th>
-                  <th class="pb-2 font-semibold text-center">Pwd Chg</th>
-                  <th class="pb-2 font-semibold text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody id="admin-student-list" class="divide-y divide-slate-100"></tbody>
-            </table>
+            <div class="table-scroll overflow-x-auto">
+              <table class="w-full min-w-[980px] text-sm">
+                <thead>
+                  <tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
+                    <th class="pb-2 font-semibold">Student ID</th>
+                    <th class="pb-2 font-semibold">Full Name</th>
+                    <th class="pb-2 font-semibold">Year Level</th>
+                    <th class="pb-2 font-semibold">Section / Block</th>
+                    <th class="pb-2 font-semibold">Status <span class="normal-case font-normal text-slate-400">(quick set)</span></th>
+                    <th class="pb-2 font-semibold text-center">Pwd Chg</th>
+                    <th class="pb-2 font-semibold text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody id="admin-student-list" class="divide-y divide-slate-100"></tbody>
+              </table>
+            </div>
             <div id="admin-list-empty" class="hidden py-8 text-center">
               <p class="text-sm text-slate-500 font-semibold">No students found.</p>
             </div>
+            <p class="text-[11px] text-slate-400 mt-3 leading-relaxed">
+              Changing <b>Status</b> or <b>Section / Block</b> saves immediately. Students marked
+              Dropped, Suspended, Graduated or Inactive are skipped when a new term is initialized,
+              and their existing clearance history is never altered.
+            </p>
           </div>
         </div>
 
@@ -1106,6 +1277,17 @@
                   <option value="Regular">Regular</option>
                   <option value="Irregular">Irregular</option>
                 </select>
+              </div>
+              <div>
+                <label for="admin-edit-academic-status" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Academic Status</label>
+                <select id="admin-edit-academic-status" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
+                  <option value="Active">Active</option>
+                  <option value="Dropped">Dropped</option>
+                  <option value="Suspended">Suspended</option>
+                  <option value="Graduated">Graduated</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
+                <p class="text-[11px] text-slate-400 mt-1.5">Only <b>Active</b> students are enrolled when a new term is initialized.</p>
               </div>
             </div>
 

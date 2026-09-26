@@ -145,6 +145,29 @@ body {
   scrollbar-width: thin;
 }
 
+/* ---------- Setup wizard: roster-mode radio cards ----------
+   The radio itself is .sr-only, so the visible card is driven by a
+   :checked sibling selector. The cards are plain <label> wrappers, which
+   makes them keyboard-reachable through the radio for free. */
+#sm-mode-roll:checked ~ .sm-mode-card,
+#sm-mode-custom:checked ~ .sm-mode-card {
+  border-color: #f59e0b;
+  background: #fffbeb;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.18);
+}
+
+#sm-mode-custom:checked ~ .sm-mode-card {
+  border-color: var(--navy);
+  background: #eff4fb;
+  box-shadow: 0 0 0 3px rgba(30, 58, 138, 0.16);
+}
+
+#sm-mode-roll:focus-visible ~ .sm-mode-card,
+#sm-mode-custom:focus-visible ~ .sm-mode-card {
+  outline: 2px solid #f59e0b;
+  outline-offset: 2px;
+}
+
 .active-col {
   background: #eff4fb;
   box-shadow: inset 0 0 0 1px #bdd0ee;

@@ -147,6 +147,19 @@
 
   var SEMESTER_CHOICES = ['1st Semester', '2nd Semester', 'Summer / Midyear'];
 
+  // Academic (enrollment lifecycle) status — distinct from enrollment_status,
+  // which stays the Regular/Irregular academic-standing flag. Only 'Active'
+  // students are enrolled when a new term is initialized.
+  var ACADEMIC_STATUSES = ['Active', 'Dropped', 'Suspended', 'Graduated', 'Inactive'];
+
+  var STATUS_CHIP_CLASS = {
+    'Active':    'bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200',
+    'Dropped':   'bg-red-100 text-red-700 ring-1 ring-inset ring-red-200',
+    'Suspended': 'bg-amber-100 text-amber-800 ring-1 ring-inset ring-amber-200',
+    'Graduated': 'bg-navy-100 text-navy-700 ring-1 ring-inset ring-navy-200',
+    'Inactive':  'bg-slate-100 text-slate-600 ring-1 ring-inset ring-slate-200'
+  };
+
   /* ===================== DOM helpers ===================== */
 
   function $(sel) { return document.querySelector(sel); }
@@ -1063,24 +1076,49 @@
     return '<span class="chip ' + cls + '" title="Used ' + used + ' of ' + PW_MAX + ' self-service password changes">' + used + '/' + PW_MAX + '</span>';
   }
 
+  function statusChip (status) {
+    var st = ACADEMIC_STATUSES.indexOf(status) === -1 ? 'Active' : status;
+    return '<span class="chip ' + STATUS_CHIP_CLASS[st] + '">' + st + '</span>';
+  }
+
+  // Compact quick-action status control used in the Manage Students table.
+  // Saving is handled by delegation on the list (change event), so this only
+  // has to render the current value.
+  function statusToggle (student) {
+    var st = ACADEMIC_STATUSES.indexOf(student.academicStatus) === -1 ? 'Active' : student.academicStatus;
+    var opts = ACADEMIC_STATUSES.map(function (s) {
+      return '<option value="' + s + '"' + (s === st ? ' selected' : '') + '>' + s + '</option>';
+    }).join('');
+    return '<select data-admin-status="' + student.id + '" aria-label="Set status for ' +
+      escapeHtml(student.full_name) + '" title="Quick set academic status" ' +
+      'class="rounded-lg border border-slate-300 bg-white px-2 py-1 text-xs font-bold text-slate-700 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">' +
+      opts + '</select>';
+  }
+
   function renderAdminList () {
     var q = ($('#admin-search').value || '').trim().toLowerCase();
     var filtered = adminStudentList.filter(function (s) {
       return !q ||
         s.full_name.toLowerCase().indexOf(q) !== -1 ||
         s.institutional_id.toLowerCase().indexOf(q) !== -1 ||
-        s.email.toLowerCase().indexOf(q) !== -1;
+        (s.email || '').toLowerCase().indexOf(q) !== -1;
     });
 
     var tbody = $('#admin-student-list');
     var rows = '';
     filtered.forEach(function (s) {
+      var st = ACADEMIC_STATUSES.indexOf(s.academicStatus) === -1 ? 'Active' : s.academicStatus;
       rows +=
-        '<tr class="hover:bg-slate-50 transition">' +
-        '<td class="py-3 font-mono text-xs text-slate-600">' + s.institutional_id + '</td>' +
-        '<td class="py-3 font-semibold text-slate-700">' + s.full_name + '</td>' +
-        '<td class="py-3 text-xs text-slate-500">' + s.email + '</td>' +
-        '<td class="py-3"><span class="chip bg-navy-50 text-navy-700 ring-1 ring-inset ring-navy-100">' + s.year_block + '</span></td>' +
+        '<tr class="hover:bg-slate-50 transition' + (st === 'Active' ? '' : ' bg-slate-50/60') + '">' +
+        '<td class="py-3 font-mono text-xs text-slate-600">' + s.institutional_id +
+          (st === 'Active' ? '' : '<div class="mt-1">' + statusChip(st) + '</div>') + '</td>' +
+        '<td class="py-3"><div class="font-semibold text-slate-700">' + escapeHtml(s.full_name) + '</div>' +
+          '<div class="text-xs text-slate-400">' + escapeHtml(s.email || '') + '</div></td>' +
+        '<td class="py-3 text-xs font-semibold text-slate-600">' + (s.yearLevel || '<span class="text-slate-300">&mdash;</span>') + '</td>' +
+        '<td class="py-3"><input type="text" list="section-options" value="' + escapeHtml(s.sectionBlock || '') + '" ' +
+          'data-admin-block="' + s.id + '" placeholder="&mdash;" aria-label="Section / block for ' + escapeHtml(s.full_name) + '" ' +
+          'class="w-32 rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-xs focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" /></td>' +
+        '<td class="py-3">' + statusToggle(s) + '</td>' +
         '<td class="py-3 text-center">' + pwChip(s) + '</td>' +
         '<td class="py-3 text-right">' +
           '<button data-admin-edit="' + s.id + '" class="rounded-lg px-3 py-1.5 text-xs font-bold bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition">Edit</button>' +
@@ -1089,6 +1127,95 @@
     });
     tbody.innerHTML = rows;
     $('#admin-list-empty').classList.toggle('hidden', filtered.length > 0);
+  }
+
+  /* ===================== SAS Director: Student Status Quick Actions ===================== */
+
+  function findAdminStudent (id) {
+    for (var i = 0; i < adminStudentList.length; i++) {
+      if (adminStudentList[i].id === id) return adminStudentList[i];
+    }
+    return null;
+  }
+
+  // Mark a student Dropped / Suspended / Graduated / Inactive / Active without
+  // opening the full edit form. Only the status changes — every existing
+  // clearance record (current and historical) is left exactly as it is; the new
+  // status only prevents NEW records from being generated for them.
+  async function quickSetStudentStatus (sel) {
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+
+    var id     = sel.dataset.adminStatus;
+    var next   = sel.value;
+    var prev   = sel.dataset.prev || '';
+    var target = findAdminStudent(id);
+    if (!target) return;
+
+    if (prev === next) return;               // nothing actually changed
+    if (ACADEMIC_STATUSES.indexOf(next) === -1) {
+      sel.value = prev || 'Active';
+      return;
+    }
+    sel.dataset.prev = next;
+
+    sel.disabled = true;
+    try {
+      var n = await DB.setStudentAcademicStatus([id], next, currentUser.email);
+      target.academicStatus = next;
+      renderAdminList();
+      var name = target.full_name;
+      toast(name + ' is now marked ' + next + '. ' +
+        (next === 'Active'
+          ? 'They will be enrolled the next time a term is initialized.'
+          : 'They will be skipped when a new term is initialized. Existing clearance history is unchanged.'),
+        'success');
+      return n;
+    } catch (err) {
+      console.error('[CLEARIT] Status change error:', err);
+      // Roll the control back so the UI never lies about the saved value.
+      sel.dataset.prev = prev;
+      sel.value = prev || target.academicStatus || 'Active';
+      sel.disabled = false;
+      toast('Could not change status: ' + ((err && err.message) || String(err)), 'error');
+    } finally {
+      sel.disabled = false;
+    }
+  }
+
+  // Edit Year Level / Section / Block for one student, in place. Rewrites the
+  // legacy combined year_block too so every dashboard stays consistent.
+  async function quickSetStudentBlock (input) {
+    if (!isSASDirector()) return;
+
+    var id      = input.dataset.adminBlock;
+    var section = input.value.trim();
+    var prev    = input.dataset.prev;
+    var target  = findAdminStudent(id);
+    if (!target) return;
+
+    if (prev === undefined) input.dataset.prev = target.sectionBlock || '';
+    if (input.dataset.prev === section) return;
+
+    input.disabled = true;
+    try {
+      var year = target.yearLevel || '';
+      await DB.assignStudentsYearSection([{
+        id:          id,
+        year_level:  year,
+        section_block: section,
+        year_block:  (year && section) ? (year + ' / ' + section) : (year || section || '')
+      }]);
+      target.sectionBlock = section;
+      input.dataset.prev = section;
+      renderAdminList();
+      toast(target.full_name + '\u2019s section set to ' + (section || '\u2014'), 'success');
+    } catch (err) {
+      console.error('[CLEARIT] Section change error:', err);
+      input.value = input.dataset.prev;
+      toast('Could not update section: ' + ((err && err.message) || String(err)), 'error');
+    } finally {
+      input.disabled = false;
+    }
   }
 
   function openAdminEdit (studentUUID) {
@@ -1108,6 +1235,11 @@
     $('#admin-edit-semester').value = student.semester || '';
     $('#admin-edit-ay').value = student.academic_year || '';
     $('#admin-edit-status').value = student.enrollment_status || 'Regular';
+    var acadStatusSel = $('#admin-edit-academic-status');
+    if (acadStatusSel) {
+      acadStatusSel.value = ACADEMIC_STATUSES.indexOf(student.academicStatus) === -1
+        ? 'Active' : student.academicStatus;
+    }
     $('#admin-edit-password').value = '';
     $('#admin-edit-pw-count').textContent = student.password_change_count || 0;
     $('#admin-reset-pw-count').disabled = (student.password_change_count || 0) === 0;
@@ -1156,6 +1288,8 @@
     var sem     = $('#admin-edit-semester').value.trim();
     var ay      = $('#admin-edit-ay').value.trim();
     var status  = $('#admin-edit-status').value;
+    var acadSel = $('#admin-edit-academic-status');
+    var acadStatus = acadSel ? acadSel.value : 'Active';
     var newPass = $('#admin-edit-password').value;
 
     if (!name || !iid) {
@@ -1174,6 +1308,23 @@
       academic_year:     ay,
       enrollment_status: status
     };
+
+    // academic_status only exists after the migration. If the save fails because
+    // of the missing column, retry without it so the rest of the edit still lands.
+    if (ACADEMIC_STATUSES.indexOf(acadStatus) !== -1) {
+      var withStatus = Object.assign({}, fields, { academic_status: acadStatus });
+      try {
+        await DB.updateStudent(adminEditTarget.id, withStatus);
+        adminEditTarget.academicStatus = acadStatus;
+        toast('Student updated successfully!', 'success');
+        closeAdminEdit();
+        await loadAdminStudentList();
+        return;
+      } catch (err) {
+        if (!/academic_status|42703|column/i.test(String((err && err.message) || ''))) throw err;
+        console.warn('[CLEARIT] academic_status unavailable — saving without it. Run clearit_academic_status_migration.sql.', err);
+      }
+    }
 
     if (newPass) {
       fields.password_hash = window.bcrypt.hashSync(newPass, 10);
@@ -1291,7 +1442,7 @@
 
   /* ===================== Semester Clearance Management (SAS Director only) ===================== */
 
-  function openSemesterMgmtModal () {
+  async function openSemesterMgmtModal () {
     if (!isSASDirector()) {
       toast('Access denied. Only the SAS Director can manage semesters.', 'error');
       return;
@@ -1304,7 +1455,12 @@
     $('#sm-ay').value = suggestNextAY();
     $('#sm-semester').value = '1st Semester';
     $('#sm-error').classList.add('hidden');
+    resetSemesterWizard();
     loadSemesterMgmtList();
+    // The wizard's status census and custom-roster previews are both derived from
+    // the full roster, so wait for it before the SAS Director reaches step 3.
+    // Rendered in parallel with the semester list — neither blocks the other.
+    await loadAdminStudentList();
   }
 
   function closeSemesterMgmtModal () {
@@ -1313,10 +1469,15 @@
     semesterEditTarget = null;
   }
 
+  // Suggests the academic year that follows the one currently in effect, e.g.
+  // 2025-2026 -> 2026-2027. Both ends advance together; advancing only the end
+  // year would produce a non-existent term like "2025-2027".
   function suggestNextAY () {
     var parts = (currentAY || '2025-2026').split('-');
-    if (parts.length === 2 && parseInt(parts[1], 10)) {
-      return parts[0] + '-' + (parseInt(parts[1], 10) + 1);
+    if (parts.length === 2 && /^\d{4}$/.test(parts[0]) && /^\d{4}$/.test(parts[1])) {
+      var start = parseInt(parts[0], 10) + 1;
+      var end   = parseInt(parts[1], 10) + 1;
+      return start + '-' + end;
     }
     return '2026-2027';
   }
@@ -1362,19 +1523,377 @@
     $('#sm-empty').classList.toggle('hidden', sorted.length > 0);
   }
 
-  // Create / Initialize New Semester: upsert the semester row, then generate 10
-  // 'pending' clearance records per ACTIVE student for that (sem, A.Y.).
+  /* ================= Initialize New Semester — 3-step wizard ================= */
+
+  var wizardStep = 1;
+  var wizardMode = 'roll_forward';
+  var wizardCsvSource = 'csv';           // 'csv' | 'filter' (custom roster source)
+  var wizardCsvRows   = null;           // parsed CSV rows awaiting submission
+  var wizardCsvLabel  = '';
+
+  function resetSemesterWizard () {
+    wizardStep = 1;
+    wizardMode = 'roll_forward';
+    wizardCsvSource = 'csv';
+    wizardCsvRows = null;
+    wizardCsvLabel = '';
+    var roll = $('#sm-mode-roll');
+    if (roll) roll.checked = true;
+    ['#sm-promote'].forEach(function (s) { var el = $(s); if (el) el.checked = false; });
+    var cy = $('#sm-cust-year');   if (cy) cy.value = '';
+    var cs = $('#sm-cust-section'); if (cs) cs.value = '';
+    var cp = $('#sm-cust-promote'); if (cp) cp.value = 'no';
+    var cf = $('#sm-csv-file');    if (cf) cf.value = '';
+    var ct = $('#sm-csv-text');    if (ct) ct.value = '';
+    var cpv = $('#sm-csv-preview'); if (cpv) { cpv.innerHTML = ''; cpv.classList.add('hidden'); }
+    syncWizardRosterMode();
+    showWizardStep(1);
+  }
+
+  function showWizardStep (n) {
+    wizardStep = n;
+    [1, 2, 3].forEach(function (i) {
+      var panel = $('#sm-wiz-' + i);
+      if (panel) panel.classList.toggle('hidden', i !== n);
+      var li = document.querySelector('[data-sm-step="' + i + '"]');
+      if (!li) return;
+      var bar = li.querySelector('div');
+      var lbl = li.querySelector('p');
+      var done = i < n, current = i === n;
+      if (bar) bar.className = 'h-1.5 rounded-full ' + (current ? 'bg-amber-500' : (done ? 'bg-emerald-400' : 'bg-slate-200'));
+      if (lbl) lbl.className = 'text-[11px] font-bold uppercase tracking-wide mt-1.5 ' +
+        (current ? 'text-amber-700' : (done ? 'text-emerald-600' : 'text-slate-400'));
+    });
+    $('#sm-error').classList.add('hidden');
+    if (n === 3) {
+      renderStatusCensus();
+      if (wizardMode === 'custom') updateCustomRosterPreview();
+    }
+  }
+
+  function currentWizardMode () {
+    var custom = $('#sm-mode-custom');
+    return (custom && custom.checked) ? 'custom' : 'roll_forward';
+  }
+
+  // Swap the step-3 options pane to match the selected roster mode.
+  function syncWizardRosterMode () {
+    wizardMode = currentWizardMode();
+    var isCustom = wizardMode === 'custom';
+    var roll = $('#sm-roll-opts');
+    var cust = $('#sm-custom-opts');
+    if (roll) roll.classList.toggle('hidden', isCustom);
+    if (cust) cust.classList.toggle('hidden', !isCustom);
+    if (isCustom) {
+      setWizardRosterSource(wizardCsvSource);
+    } else {
+      $('#sm-error').classList.add('hidden');
+    }
+  }
+
+  // CSV vs. Year/Section picker inside the custom-roster options.
+  function setWizardRosterSource (src) {
+    wizardCsvSource = (src === 'filter') ? 'filter' : 'csv';
+    var isCsv = wizardCsvSource === 'csv';
+    var tabs = { csv: $('#sm-tab-csv'), filter: $('#sm-tab-filter') };
+    Object.keys(tabs).forEach(function (k) {
+      if (tabs[k]) tabs[k].classList.toggle('hidden', k !== wizardCsvSource);
+    });
+    var btns = { csv: $('#sm-src-csv'), filter: $('#sm-src-filter') };
+    Object.keys(btns).forEach(function (k) {
+      var b = btns[k];
+      if (!b) return;
+      var on = k === wizardCsvSource;
+      b.setAttribute('aria-selected', on ? 'true' : 'false');
+      b.className = 'rounded-lg px-3 py-1.5 text-xs font-bold border transition ' +
+        (on ? 'bg-navy-50 text-navy-700 border-navy-200'
+            : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50');
+    });
+    if (isCsv) {
+      var pv = $('#sm-csv-preview');
+      if (pv && !wizardCsvRows) { pv.innerHTML = ''; pv.classList.add('hidden'); }
+    } else {
+      updateCustomRosterPreview();
+    }
+  }
+
+  // Roster-wide census so the SAS Director can see exactly who will be
+  // carried over and who will be skipped, before committing.
+  function renderStatusCensus () {
+    var host = $('#sm-status-census');
+    if (!host) return;
+    var counts = {};
+    ACADEMIC_STATUSES.forEach(function (s) { counts[s] = 0; });
+    (adminStudentList || []).forEach(function (s) {
+      var st = ACADEMIC_STATUSES.indexOf(s.academicStatus) === -1 ? 'Active' : s.academicStatus;
+      counts[st]++;
+    });
+    host.innerHTML = ACADEMIC_STATUSES.map(function (s) {
+      var isActive = (s === 'Active');
+      return '<div class="rounded-xl border px-3 py-2.5 ' +
+        (isActive ? 'border-emerald-200 bg-emerald-50/60' : 'border-slate-200 bg-white') + '">' +
+        '<div class="text-lg font-extrabold leading-none ' + (isActive ? 'text-emerald-700' : 'text-slate-600') + '">' + counts[s] + '</div>' +
+        '<div class="text-[10px] font-bold uppercase tracking-wide mt-1 ' + (isActive ? 'text-emerald-600' : 'text-slate-400') + '">' + s + '</div>' +
+        (isActive ? '' : '<div class="text-[10px] text-slate-400 mt-0.5 leading-tight">skipped</div>') +
+        '</div>';
+    }).join('');
+  }
+
+  // ── CSV parsing (no dependencies) ───────────────────────────────────────
+  // Splits one CSV line honouring double-quoted fields and escaped "" quotes.
+  function splitCsvLine (line) {
+    var out = [], cur = '', inQuotes = false;
+    for (var i = 0; i < line.length; i++) {
+      var ch = line.charAt(i);
+      if (inQuotes) {
+        if (ch === '"') {
+          if (line.charAt(i + 1) === '"') { cur += '"'; i++; }
+          else inQuotes = false;
+        } else cur += ch;
+      } else if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        out.push(cur); cur = '';
+      } else cur += ch;
+    }
+    out.push(cur);
+    return out;
+  }
+
+  // Returns { rows: [...], skipped: n, errors: [...] }.
+  // Recognised headers (case/space insensitive):
+  //   institutional_id | student_id | id
+  //   full_name | name          (informational only, used to warn on mismatch)
+  //   academic_status | status
+  //   year_level | year
+  //   section_block | section | block
+  function parseRosterCsv (text) {
+    var lines = String(text || '').split(/\r?\n/).filter(function (l) { return l.trim() !== ''; });
+    if (!lines.length) return { rows: [], skipped: 0, errors: ['The CSV is empty.'] };
+
+    var header = splitCsvLine(lines[0]).map(function (h) {
+      return h.trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z_]/g, '');
+    });
+
+    var col = {};
+    header.forEach(function (h, i) { if (h && col[h] === undefined) col[h] = i; });
+    var idCol = col.institutional_id !== undefined ? col.institutional_id
+              : (col.student_id !== undefined ? col.student_id
+              : (col.id !== undefined ? col.id : -1));
+    if (idCol === -1) {
+      return { rows: [], skipped: 0, errors: ['No "institutional_id" column found. The header row must contain institutional_id.'] };
+    }
+    var nameCol   = col.full_name !== undefined ? col.full_name : (col.name !== undefined ? col.name : -1);
+    var statusCol = col.academic_status !== undefined ? col.academic_status : (col.status !== undefined ? col.status : -1);
+    var yearCol   = col.year_level !== undefined ? col.year_level : (col.year !== undefined ? col.year : -1);
+    var secCol    = col.section_block !== undefined ? col.section_block
+                  : (col.section !== undefined ? col.section : (col.block !== undefined ? col.block : -1));
+
+    var rows = [], errors = [], skipped = 0;
+    for (var i = 1; i < lines.length; i++) {
+      var cells = splitCsvLine(lines[i]);
+      var iid = (cells[idCol] || '').trim();
+      if (!iid) { skipped++; continue; }
+
+      var st = statusCol === -1 ? '' : (cells[statusCol] || '').trim();
+      if (st) {
+        // Tolerate case / spacing differences ("dropped", "Dropped Out").
+        var norm = st.replace(/[\s_-]+/g, '');
+        var match = null;
+        ACADEMIC_STATUSES.forEach(function (a) {
+          if (a.toLowerCase() === norm.toLowerCase()) match = a;
+        });
+        if (!match) {
+          errors.push('Row ' + i + ' (' + iid + '): "' + st + '" is not a valid status. Use ' + ACADEMIC_STATUSES.join(', ') + '.');
+          continue;
+        }
+        st = match;
+      }
+
+      var row = { institutional_id: iid };
+      if (st) row.academic_status = st;
+      if (yearCol !== -1) { var y = (cells[yearCol] || '').trim(); if (y) row.year_level = y; }
+      if (secCol !== -1)  { var s2 = (cells[secCol] || '').trim();  if (s2) row.section_block = s2; }
+      if (nameCol !== -1) { var n = (cells[nameCol] || '').trim(); if (n) row.full_name = n; }
+      rows.push(row);
+    }
+    return { rows: rows, skipped: skipped, errors: errors };
+  }
+
+  function renderCsvPreview (parsed, label) {
+    var host = $('#sm-csv-preview');
+    if (!host) return;
+    var byStatus = tallyRowStatuses(parsed.rows, {});
+
+    var html = '<div class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs">';
+    html += '<p class="font-bold text-slate-700">' + parsed.rows.length + ' row(s) ready' +
+      (label ? ' <span class="font-normal text-slate-500">from ' + escapeHtml(label) + '</span>' : '') + '</p>';
+    if (parsed.skipped) {
+      html += '<p class="text-amber-700 mt-1">' + parsed.skipped + ' blank row(s) skipped.</p>';
+    }
+    var chips = ACADEMIC_STATUSES.filter(function (s) { return byStatus[s]; })
+      .map(function (s) { return '<span class="chip ' + STATUS_CHIP_CLASS[s] + '">' + s + ' &times;' + byStatus[s] + '</span>'; });
+    if (chips.length) {
+      html += '<div class="flex flex-wrap gap-1.5 mt-2">' + chips.join('') + '</div>';
+    }
+    if (parsed.errors.length) {
+      html += '<ul class="mt-2 text-red-600 space-y-0.5 list-disc pl-4">' +
+        parsed.errors.slice(0, 5).map(function (e) { return '<li>' + escapeHtml(e) + '</li>'; }).join('') +
+        (parsed.errors.length > 5 ? '<li>&hellip; and ' + (parsed.errors.length - 5) + ' more.</li>' : '') +
+        '</ul>';
+    }
+    html += '</div>';
+    host.innerHTML = html;
+    host.classList.remove('hidden');
+  }
+
+  function tallyRowStatuses (rows, out) {
+    (rows || []).forEach(function (r) {
+      var st = r.academic_status || 'Active';
+      out[st] = (out[st] || 0) + 1;
+    });
+    return out;
+  }
+
+  function readCsvFile (file) {
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload  = function () { resolve(String(reader.result || '')); };
+      reader.onerror = function () { reject(new Error('Could not read the selected file.')); };
+      reader.readAsText(file);
+    });
+  }
+
+  function handleParseRosterCsv () {
+    var fileEl = $('#sm-csv-file');
+    var textEl = $('#sm-csv-text');
+    var file = fileEl && fileEl.files && fileEl.files[0];
+    var label = '';
+
+    var proceed = function (text, lbl) {
+      label = lbl || '';
+      var parsed = parseRosterCsv(text);
+      if (!parsed.rows.length) {
+        wizardCsvRows = null;
+        wizardCsvLabel = '';
+        var msg = parsed.errors.length ? parsed.errors[0] : 'No student rows found in that CSV.';
+        $('#sm-error').textContent = msg;
+        $('#sm-error').classList.remove('hidden');
+        var host = $('#sm-csv-preview'); if (host) { host.innerHTML = ''; host.classList.add('hidden'); }
+        return;
+      }
+      wizardCsvRows = parsed.rows;
+      wizardCsvLabel = label;
+      renderCsvPreview(parsed, label);
+      toast('Parsed ' + parsed.rows.length + ' roster row(s).', 'success');
+    };
+
+    if (file) {
+      readCsvFile(file).then(function (text) { proceed(text, file.name); })
+        .catch(function (err) {
+          $('#sm-error').textContent = err.message;
+          $('#sm-error').classList.remove('hidden');
+        });
+      return;
+    }
+    var typed = textEl ? textEl.value.trim() : '';
+    if (!typed) {
+      $('#sm-error').textContent = 'Choose a CSV file or paste CSV text first.';
+      $('#sm-error').classList.remove('hidden');
+      return;
+    }
+    proceed(typed, 'pasted CSV');
+  }
+
+  // Year / Section picker preview for the custom roster.
+  function updateCustomRosterPreview () {
+    var year = $('#sm-cust-year') ? $('#sm-cust-year').value : '';
+    var sec  = $('#sm-cust-section') ? $('#sm-cust-section').value.trim() : '';
+    var host = $('#sm-custom-preview');
+    if (!host) return;
+    var matches = (adminStudentList || []).filter(function (s) {
+      var st = ACADEMIC_STATUSES.indexOf(s.academicStatus) === -1 ? 'Active' : s.academicStatus;
+      if (st !== 'Active') return false;                 // only Active get enrolled
+      if (year && (s.yearLevel || '') !== year) return false;
+      if (sec  && (s.sectionBlock || '') !== sec)  return false;
+      return true;
+    });
+    host.innerHTML = '<p class="text-[11px] text-slate-500 mt-2.5 leading-relaxed">' +
+      '<b class="text-navy-700">' + matches.length + '</b> Active student(s) match' +
+      (year ? ' <b>' + escapeHtml(year) + '</b>' : '') +
+      (sec  ? ' / <b>' + escapeHtml(sec) + '</b>' : '') +
+      '. Non-Active students are never enrolled.</p>';
+  }
+
+  // Persist the parsed CSV roster (status / year / section) before the term is
+  // initialized, then work out which students it actually left Active.
+  //
+  // Only students NAMED in the CSV belong to a custom roster, so students left
+  // out of the file are not enrolled even if they are Active. Returns
+  // { report, cohortIds }.
+  async function applyRosterCsvRows () {
+    if (!wizardCsvRows || !wizardCsvRows.length) return { report: null, cohortIds: [] };
+
+    var report = await DB.applyRosterUpload(wizardCsvRows, currentUser.email);
+
+    // Reload so the statuses the upload just wrote are reflected locally.
+    await loadAdminStudentList();
+
+    // institutional_id matching is case-insensitive, matching the RPC.
+    var named = {};
+    wizardCsvRows.forEach(function (r) { named[String(r.institutional_id).trim().toUpperCase()] = true; });
+
+    var cohortIds = (adminStudentList || []).filter(function (s) {
+      if (!named[String(s.institutional_id || '').trim().toUpperCase()]) return false;
+      var st = ACADEMIC_STATUSES.indexOf(s.academicStatus) === -1 ? 'Active' : s.academicStatus;
+      return st === 'Active';
+    }).map(function (s) { return s.id; });
+
+    return { report: report, cohortIds: cohortIds };
+  }
+
+  // Create / Initialize New Semester.
+  //
+  // One database round-trip (fn_init_new_term) performs the whole transition:
+  // registers the semester, stamps + optionally promotes the roster, and
+  // appends this term's clearance records. Existing records — for this term or
+  // any earlier one — are never updated or deleted.
   async function submitCreateSemester () {
     if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
 
     var ay  = $('#sm-ay').value.trim();
     var sem = $('#sm-semester').value;
-    var initYear    = $('#sm-init-year').value;
-    var initSection = $('#sm-init-section').value.trim();
+    var mode = currentWizardMode();
+
     if (!/^\d{4}-\d{4}$/.test(ay)) {
       $('#sm-error').textContent = 'Academic Year must be in YYYY-YYYY format, e.g. 2026-2027.';
       $('#sm-error').classList.remove('hidden');
       return;
+    }
+
+    // Resolve the custom-roster source before touching the database.
+    var opts = {
+      semester: sem, academicYear: ay, mode: mode,
+      promote: false, sasEmail: currentUser.email
+    };
+
+    if (mode === 'roll_forward') {
+      opts.promote = !!($('#sm-promote') && $('#sm-promote').checked);
+    } else if (wizardCsvSource === 'csv') {
+      if (!wizardCsvRows || !wizardCsvRows.length) {
+        $('#sm-error').textContent = 'Parse a CSV roster first (step 3 \u2192 CSV Roster \u2192 Parse CSV).';
+        $('#sm-error').classList.remove('hidden');
+        return;
+      }
+    } else {
+      opts.yearLevel    = $('#sm-cust-year') ? $('#sm-cust-year').value : '';
+      opts.sectionBlock = $('#sm-cust-section') ? $('#sm-cust-section').value.trim() : '';
+      opts.promote      = !!(($('#sm-cust-promote') ? $('#sm-cust-promote').value : 'no') === 'yes');
+      if (!opts.yearLevel && !opts.sectionBlock) {
+        $('#sm-error').textContent = 'Pick a Year Level and/or a Section for the custom roster.';
+        $('#sm-error').classList.remove('hidden');
+        return;
+      }
     }
 
     var btn = $('#sm-init-btn');
@@ -1382,24 +1901,59 @@
     $('#sm-error').classList.add('hidden');
 
     try {
-      await DB.createSemester(sem, ay, currentUser.email);
-      // Stamp all active students to the new term, then generate clearances.
-      await DB.updateActiveStudentsSemester(sem, ay);
-      var count = await DB.initializeClearance(sem, ay, initYear, initSection);
+      // A CSV roster carries per-student status/year/section, so apply it first
+      // and scope the enrollment to the students it actually left Active.
+      var uploadReport = null;
+      if (mode === 'custom' && wizardCsvSource === 'csv') {
+        var applied = await applyRosterCsvRows();
+        uploadReport = applied.report;
+        if (!applied.cohortIds.length) {
+          throw new Error('None of the students named in that CSV are Active, so there is nobody to enroll. Check the academic_status column.');
+        }
+        opts.studentIds = applied.cohortIds;
+      }
+
+      var result = await DB.initNewTerm(opts);
+      result = result || {};
+
       ensureSemesterOption(sem, ay);
       await refreshSemesterOptions();
       fillAllSemesterSelects();
       setSemesterSelection(sem, ay);
       await loadSemesterMgmtList();
-      // Refresh whichever dashboard is currently on screen so the newly
-      // initialized term shows immediately.
+      await loadAdminStudentList();
       if (currentUser.type === 'student') await refreshStudentData();
       else await refreshSignatoryData();
-      toast('Semester ' + semesterLabel(sem, ay) + ' created. Updated student semester tags and initialized ' +
-            (count || 0) + ' pending clearance record(s) for active students.', 'success');
+
+      // Build the summary the SAS Director actually needs to see.
+      var parts = [];
+      parts.push((result.records_created || 0) + ' pending clearance record(s) created for ' +
+        (result.cohort_size || 0) + ' student(s).');
+      if (result.students_stamped) parts.push(result.students_stamped + ' student(s) stamped to ' + semesterLabel(sem, ay) + '.');
+      if (result.students_promoted) parts.push(result.students_promoted + ' promoted one year.');
+      var skipped = (result.skipped_dropped || 0) + (result.skipped_suspended || 0) +
+                    (result.skipped_graduated || 0) + (result.skipped_inactive || 0);
+      if (skipped) {
+        parts.push('Skipped ' + skipped + ' non-active student(s) (' +
+          (result.skipped_dropped || 0) + ' dropped, ' +
+          (result.skipped_suspended || 0) + ' suspended, ' +
+          (result.skipped_graduated || 0) + ' graduated, ' +
+          (result.skipped_inactive || 0) + ' inactive).');
+      }
+      if (uploadReport) {
+        var unknown = (uploadReport.unknown || []).length;
+        parts.push('Roster applied to ' + (uploadReport.updated || 0) + ' student(s)' +
+          (unknown ? '; ' + unknown + ' ID(s) not found: ' + uploadReport.unknown.slice(0, 5).join(', ') +
+            (unknown > 5 ? '\u2026' : '') : '') + '.');
+      }
+      parts.push('Previous terms\u2019 clearance history is unchanged.');
+
+      toast(semesterLabel(sem, ay) + ' initialized. ' + parts.join(' '), 'success');
+
+      resetSemesterWizard();
     } catch (err) {
       console.error(err);
-      $('#sm-error').textContent = err.message;
+      $('#sm-error').textContent = (err && err.message) || String(err);
       $('#sm-error').classList.remove('hidden');
     } finally {
       setLoading(btn, false);
@@ -2618,6 +3172,23 @@
       if (btn) openAdminEdit(btn.dataset.adminEdit);
     });
 
+    // SAS Director quick actions: set academic status straight from the table
+    $('#admin-student-list').addEventListener('change', function (e) {
+      var sel = e.target.closest('select[data-admin-status]');
+      if (sel) quickSetStudentStatus(sel);
+    });
+
+    // SAS Director quick action: edit a student's Section / Block in place
+    $('#admin-student-list').addEventListener('change', function (e) {
+      var input = e.target.closest('input[data-admin-block]');
+      if (input) quickSetStudentBlock(input);
+    });
+    // Enter in the section box commits immediately instead of relying on blur
+    $('#admin-student-list').addEventListener('keydown', function (e) {
+      var input = e.target.closest('input[data-admin-block]');
+      if (input && e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    });
+
     $('#admin-edit-form').addEventListener('submit', function (e) {
       e.preventDefault();
       saveAdminEdit();
@@ -2644,6 +3215,35 @@
     $('#sa-init-term-btn').addEventListener('click', initializeSelectedTerm);
 
     $('#sm-init-btn').addEventListener('click', submitCreateSemester);
+
+    // ── Initialize New Semester wizard ───────────────────────────────────
+    // Step navigation
+    $('#sm-wiz-1-next').addEventListener('click', function () {
+      var ay = $('#sm-ay').value.trim();
+      if (!/^\d{4}-\d{4}$/.test(ay)) {
+        $('#sm-error').textContent = 'Academic Year must be in YYYY-YYYY format, e.g. 2026-2027.';
+        $('#sm-error').classList.remove('hidden');
+        return;
+      }
+      showWizardStep(2);
+    });
+    $('#sm-wiz-2-back').addEventListener('click', function () { showWizardStep(1); });
+    $('#sm-wiz-2-next').addEventListener('click', function () { showWizardStep(3); });
+    $('#sm-wiz-3-back').addEventListener('click', function () { showWizardStep(2); });
+
+    // Roster-mode radio -> swap the step-3 options pane
+    ['#sm-mode-roll', '#sm-mode-custom'].forEach(function (sel) {
+      $(sel).addEventListener('change', syncWizardRosterMode);
+    });
+
+    // Custom-roster source tabs (CSV vs. Year/Section)
+    $('#sm-src-csv').addEventListener('click', function () { setWizardRosterSource('csv'); });
+    $('#sm-src-filter').addEventListener('click', function () { setWizardRosterSource('filter'); });
+    $('#sm-csv-parse').addEventListener('click', handleParseRosterCsv);
+    ['#sm-cust-year', '#sm-cust-section'].forEach(function (sel) {
+      $(sel).addEventListener('change', updateCustomRosterPreview);
+      $(sel).addEventListener('input', updateCustomRosterPreview);
+    });
 
     $('#sm-semester-list').addEventListener('click', async function (e) {
       var btn = e.target.closest('button[data-sm-activate], button[data-sm-edit]');
