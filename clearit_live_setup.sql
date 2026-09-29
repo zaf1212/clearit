@@ -904,12 +904,73 @@ UPDATE students SET academic_status = 'Active' WHERE academic_status IS NULL;
 -- =============================================================================
 
 -- -----------------------------------------------------------------------------
--- 1) Signature columns
+-- 1) The public "signatures" Storage bucket.
+--
+--    Best effort by design: the SQL editor's role is not guaranteed to be
+--    allowed to write storage.buckets, and this box has no dashboard access. If
+--    the insert cannot run, the rest of the migration still applies (the columns
+--    are what the app needs) and the WARNING below tells the operator exactly
+--    what to click. Saving a signature also names the bucket in its own error,
+--    so the app degrades to a clear message rather than a silent failure.
+-- -----------------------------------------------------------------------------
+DO $$
+DECLARE
+  v_have_storage boolean := false;
+  v_bucket       text    := 'signatures';
+BEGIN
+  SELECT EXISTS (SELECT 1 FROM information_schema.tables
+                 WHERE table_schema = 'storage' AND table_name = 'buckets')
+    INTO v_have_storage;
+  IF NOT v_have_storage THEN
+    RAISE WARNING 'storage schema not present (not a Supabase project?): skipping the "%" bucket.', v_bucket;
+    RETURN;
+  END IF;
+  IF EXISTS (SELECT 1 FROM storage.buckets WHERE id = v_bucket) THEN
+    -- Already there. Make sure it is PUBLIC, because a private bucket would
+    -- make every saved signature fail to load on the printable form. The
+    -- report distinguishes "fine as it was" from "just repaired", so the
+    -- operator reading the SQL editor output is not misled into thinking
+    -- nothing was touched.
+    DECLARE
+      v_was_public boolean;
+    BEGIN
+      SELECT b.public INTO v_was_public FROM storage.buckets b WHERE b.id = v_bucket;
+      UPDATE storage.buckets
+         SET public = true,
+             file_size_limit = COALESCE(file_size_limit, 5242880),
+             allowed_mime_types = COALESCE(allowed_mime_types, ARRAY['image/png','image/jpeg'])
+       WHERE id = v_bucket;
+      IF v_was_public THEN
+        RAISE NOTICE 'Storage bucket "%" already exists and is public.', v_bucket;
+      ELSE
+        RAISE WARNING 'Storage bucket "%" existed but was PRIVATE - it is now public. '
+                      'A private bucket would have made every saved signature fail to load '
+                      'on the printable form.', v_bucket;
+      END IF;
+    END;
+    RETURN;
+  END IF;
+  BEGIN
+    INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    VALUES (v_bucket, v_bucket, true, 5242880, ARRAY['image/png','image/jpeg'])
+    ON CONFLICT (id) DO NOTHING;
+    RAISE NOTICE 'Created public storage bucket "%" (5 MB cap, PNG/JPEG only).', v_bucket;
+  EXCEPTION WHEN insufficient_privilege THEN
+    RAISE WARNING
+      'Could not create the "%" storage bucket (%). Create it in the dashboard: '
+      'Storage -> New bucket -> name it "%" -> tick "Public bucket". '
+      'Signature saving will report this until it exists.',
+      v_bucket, SQLERRM, v_bucket;
+  END;
+END;
+$$;
+-- -----------------------------------------------------------------------------
+-- 2) Signature columns
 -- -----------------------------------------------------------------------------
 ALTER TABLE signatories    ADD COLUMN IF NOT EXISTS signature_url TEXT;
 ALTER TABLE clearance_records ADD COLUMN IF NOT EXISTS signature_url TEXT;
 -- -----------------------------------------------------------------------------
--- 2) Size guards.
+-- 3) Size guards.
 --    A trimmed signature PNG lands around 5-40 KB of base64; the 400 000 char
 --    cap is roughly 10x headroom while still refusing an unbounded payload.
 -- -----------------------------------------------------------------------------
@@ -926,7 +987,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 3) fn_approve_clearance — approval and signature snapshot in one statement.
+-- 4) fn_approve_clearance — approval and signature snapshot in one statement.
 --
 --    The signature is read from the signatory row INSIDE the RPC rather than
 --    being passed in by the browser. That keeps the snapshot atomic with the
@@ -955,7 +1016,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 4) fn_flag_clearance — a requirement put On Hold carries no signature.
+-- 5) fn_flag_clearance — a requirement put On Hold carries no signature.
 --    The record keeps signed_by (who raised the hold) but drops signed_at and
 --    the signature image, so nothing can render a signature over a hold.
 -- -----------------------------------------------------------------------------
@@ -980,7 +1041,7 @@ BEGIN
 END;
 $$;
 -- -----------------------------------------------------------------------------
--- 5) v_clearance_details — expose the snapshot.
+-- 6) v_clearance_details — expose the snapshot.
 --
 --    DROP + CREATE rather than CREATE OR REPLACE so the output is identical no
 --    matter which earlier migrations ran. Every column the academic-status

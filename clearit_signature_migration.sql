@@ -27,10 +27,23 @@
 --
 -- STORAGE FORMAT
 --   signature_url holds a PUBLIC URL into a Supabase Storage bucket:
---     https://<project>.supabase.co/storage/v1/object/public/signatures/signatory-<uuid>.png
---   The image bytes live in Storage, one object per officer, overwritten in
---   place on re-save; the column and each clearance record carry only that short
---   URL. Nothing large is stored in the database any more.
+--     https://<project>.supabase.co/storage/v1/object/public/signatures/signatory-<uuid>-<version>.png
+--   The image bytes live in Storage; the column and each clearance record carry
+--   only that short URL. Nothing large is stored in the database any more.
+--
+--   EVERY DRAW GETS ITS OWN OBJECT, and only the newest is recorded on the
+--   signatory row. That is what makes the snapshot above meaningful: a clearance
+--   already handed out keeps resolving the exact bytes it was signed with, so an
+--   officer who re-draws cannot retroactively change an approval. The cost is
+--   one object per draw, and "remove my signature" has to delete all of them -
+--   including the one a past clearance still points at, which then prints an
+--   empty line. That is the intended trade: an officer who withdraws their
+--   signature has asked for it to be gone.
+--
+--   Note the object key is NOT <uuid>.png with an overwrite. A stable key per
+--   officer would be tidier, but a re-draw would then rewrite the image on every
+--   clearance that officer ever approved, which is precisely the audit-trail
+--   defect the snapshot exists to prevent.
 --
 --   The bucket is PUBLIC on purpose. A private bucket would need short-lived
 --   signed URLs, and an official clearance form has to keep rendering when it is

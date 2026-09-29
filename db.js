@@ -352,14 +352,23 @@ var DB = (function () {
   // at approval time, so changing it here never rewrites an approval that has
   // already happened.
   //
-  // WHY A STABLE PER-OFFICER PATH INSTEAD OF signature_<id>_<Date.now()>.png
-  //   A timestamped name writes a brand new object on every single save, so the
-  //   previous file is orphaned forever with no reference to it, and "remove my
-  //   signature" has no way to know which object to delete. One stable object per
-  //   officer, written with upsert:true, means re-saving overwrites in place:
-  //   no orphans, and removal is just a known path. It also means the public URL
-  //   recorded on a clearance never changes, so a snapshot taken at approval
-  //   time keeps resolving even after the officer re-draws.
+  // WHY EACH DRAW GETS ITS OWN OBJECT
+  //   The approval RPC snapshots the officer's signature_url onto the clearance
+  //   record, and that snapshot is the audit trail: a clearance already handed
+  //   out, already carrying an OFFICIAL VERIFICATION QR code, must keep showing
+  //   the signature it was signed with. A single object per officer, overwritten
+  //   in place, would quietly break that - re-draw once and every clearance the
+  //   officer ever approved would re-print with the newer drawing.
+  //
+  //   So each save writes a fresh, immutable object and only the CURRENT one is
+  //   recorded on the signatory row. Older objects are not garbage: they are
+  //   still referenced by the clearances that were signed with them, which is
+  //   exactly why they must not be deleted here.
+  //
+  //   "Remove my signature" therefore has to clear out every version, not just
+  //   the current one, so it lists the officer's objects by prefix. That is the
+  //   trade-off of this design: one file per draw, in exchange for a snapshot
+  //   that actually means something.
   //
   // PRIVACY NOTE
   //   The bucket is public, because a private one would need short-lived signed
@@ -369,8 +378,49 @@ var DB = (function () {
   //   guessing - only someone who already holds the URL can fetch it.
   var SIG_BUCKET = 'signatures';
 
-  function sigStoragePath (signatoryUUID) {
-    return 'signatory-' + signatoryUUID + '.png';
+  // Shared by every version of one officer's signature, and unique to them
+  // because a UUID is fixed-length, so no officer's prefix can match another's.
+  function sigStoragePrefix (signatoryUUID) {
+    return 'signatory-' + signatoryUUID + '-';
+  }
+
+  // A fresh key per save. The time prefix keeps the bucket sortable by age; the
+  // random suffix guarantees a new object even if two saves land in the same
+  // millisecond, which a double-click on Save could easily do.
+  function sigVersionToken () {
+    return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
+  }
+
+  // The extension follows the real media type rather than assuming PNG, so the
+  // key does not claim to be a PNG when the officer uploaded a JPEG.
+  function sigStoragePath (signatoryUUID, token, contentType) {
+    return sigStoragePrefix(signatoryUUID) + token + '.' +
+           (/^image\/jpe?g$/i.test(contentType || '') ? 'jpg' : 'png');
+  }
+
+  // Every object belonging to one officer, across all their redraws.
+  //
+  // The storage list endpoint is folder-based and does NOT honour a substring
+  // prefix here (verified: a non-empty prefix returns nothing rather than a
+  // subset), so the bucket is listed and filtered in JS. Pages are walked to
+  // completion rather than trusting one page, because a partial result would
+  // make "remove my signature" silently leave a copy behind in a public bucket.
+  async function sigListOfficerObjects (bucket, signatoryUUID) {
+    var prefix = sigStoragePrefix(signatoryUUID);
+    var pageSize = 1000;
+    var offset = 0;
+    var found = [];
+    for (;;) {
+      var res = await bucket.list('', { limit: pageSize, offset: offset });
+      if (res.error) throw res.error;
+      var page = res.data || [];
+      for (var i = 0; i < page.length; i++) {
+        if (page[i].name.indexOf(prefix) === 0) found.push(page[i].name);
+      }
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    return found;
   }
 
   // Turns "data:image/png;base64,...." into the bytes to upload, keeping the
@@ -411,7 +461,9 @@ var DB = (function () {
   async function saveSignatorySignature (signatoryUUID, dataUrl) {
     var decoded = sigDataUrlToBlob(dataUrl);
     var bucket = window.supabase.storage.from(SIG_BUCKET);
-    var path = sigStoragePath(signatoryUUID);
+    // A brand new object every time, so clearances already signed with the
+    // officer's previous drawing keep resolving the bytes they were signed with.
+    var path = sigStoragePath(signatoryUUID, sigVersionToken(), decoded.contentType);
 
     var up = await bucket.upload(path, decoded.blob, {
       contentType: decoded.contentType,
@@ -427,17 +479,34 @@ var DB = (function () {
       throw new Error('Could not work out where the signature was saved. Please try again.');
     }
 
-    var { error } = await window.supabase
+    // .select() asks PostgREST to hand back the row it actually updated. Without
+    // it an update matching ZERO rows is indistinguishable from a successful one,
+    // so a save against a signatory who has since been deleted would report
+    // success while leaving an unreferenced object behind - and because every
+    // draw gets its own object, that would accumulate one per attempt.
+    var { data, error } = await window.supabase
       .from('signatories')
       .update({ signature_url: publicUrl })
-      .eq('id', signatoryUUID);
-    if (error) {
-      // The object stays put on purpose. Its path is stable, so the next save
-      // overwrites it rather than orphaning it, and deleting it here would
-      // destroy the officer's PREVIOUS signature, which this very URL may still
-      // be serving on clearances they have already approved.
-      if (/signature_url|column/i.test(error.message || '')) {
+      .eq('id', signatoryUUID)
+      .select('id')
+      .maybeSingle();
+    if (error || !data) {
+      // Nothing points at this object - its URL was never written to the row -
+      // so it is safe to delete and it must be, or a failed save would leave a
+      // copy of someone's signature sitting in a public bucket forever. Only
+      // this save's own object is removed; the officer's previous versions stay,
+      // because clearances they signed may still be serving them.
+      try {
+        var drop = await bucket.remove([path]);
+        if (drop && drop.error) console.warn('Unsaved signature object not removed:', drop.error);
+      } catch (e) {
+        console.warn('Unsaved signature object not removed:', e);
+      }
+      if (error && /signature_url|column/i.test(error.message || '')) {
         throw new Error('Signature storage is not set up on this database yet. Please run clearit_signature_migration.sql.');
+      }
+      if (!error) {
+        throw new Error('That signatory account no longer exists, so the signature was not saved.');
       }
       throw friendlyError(error, 'Could not save your signature');
     }
@@ -445,15 +514,16 @@ var DB = (function () {
   }
 
   async function clearSignatorySignature (signatoryUUID) {
-    // Best effort: the goal is "no signature on file", and a leftover object is
-    // harmless because the next save overwrites the same stable path.
-    try {
-      var rm = await window.supabase.storage.from(SIG_BUCKET).remove([sigStoragePath(signatoryUUID)]);
-      if (rm && rm.error) console.warn('Signature object not removed:', rm.error);
-    } catch (e) {
-      console.warn('Signature object not removed:', e);
-    }
-
+    // Every draw the officer has ever made is a separate object, and the older
+    // ones are still referenced by clearances they have already approved, so
+    // "remove my signature" means removing all of them - which is the one cost
+    // this design trades for an audit trail that cannot be rewritten. Those
+    // clearances will print an empty signature line afterwards, as they must if
+    // the officer has asked for their signature to be gone.
+    //
+    // The column is cleared first, so the goal - "no signature on file" - holds
+    // even if the bucket is unreachable; a storage failure is then only worth a
+    // console warning, not a red error box after the signature has already gone.
     var { error } = await window.supabase
       .from('signatories')
       .update({ signature_url: null })
@@ -463,6 +533,17 @@ var DB = (function () {
         throw new Error('Signature storage is not set up on this database yet. Please run clearit_signature_migration.sql.');
       }
       throw friendlyError(error, 'Could not remove your signature');
+    }
+
+    try {
+      var bucket = window.supabase.storage.from(SIG_BUCKET);
+      var names = await sigListOfficerObjects(bucket, signatoryUUID);
+      if (names.length) {
+        var rm = await bucket.remove(names);
+        if (rm && rm.error) console.warn('Signature object not removed:', rm.error);
+      }
+    } catch (e) {
+      console.warn('Signature object not removed:', e);
     }
     return true;
   }
