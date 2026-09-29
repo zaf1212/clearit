@@ -384,6 +384,14 @@ var DB = (function () {
     return 'signatory-' + signatoryUUID + '-';
   }
 
+  // The single object written before signatures were versioned: one per officer,
+  // overwritten in place, with no trailing dash. Officers who saved before that
+  // change still have it sitting in the bucket, and it is still being printed on
+  // their clearances, so "remove my signature" has to take it with them.
+  function sigLegacyStoragePath (signatoryUUID) {
+    return 'signatory-' + signatoryUUID + '.png';
+  }
+
   // A fresh key per save. The time prefix keeps the bucket sortable by age; the
   // random suffix guarantees a new object even if two saves land in the same
   // millisecond, which a double-click on Save could easily do.
@@ -398,7 +406,8 @@ var DB = (function () {
            (/^image\/jpe?g$/i.test(contentType || '') ? 'jpg' : 'png');
   }
 
-  // Every object belonging to one officer, across all their redraws.
+  // Every object belonging to one officer, across all their redraws, PLUS the
+  // single pre-versioning object if they still have one.
   //
   // The storage list endpoint is folder-based and does NOT honour a substring
   // prefix here (verified: a non-empty prefix returns nothing rather than a
@@ -407,6 +416,7 @@ var DB = (function () {
   // make "remove my signature" silently leave a copy behind in a public bucket.
   async function sigListOfficerObjects (bucket, signatoryUUID) {
     var prefix = sigStoragePrefix(signatoryUUID);
+    var legacy = sigLegacyStoragePath(signatoryUUID);
     var pageSize = 1000;
     var offset = 0;
     var found = [];
@@ -415,7 +425,8 @@ var DB = (function () {
       if (res.error) throw res.error;
       var page = res.data || [];
       for (var i = 0; i < page.length; i++) {
-        if (page[i].name.indexOf(prefix) === 0) found.push(page[i].name);
+        var name = page[i].name;
+        if (name === legacy || name.indexOf(prefix) === 0) found.push(name);
       }
       if (page.length < pageSize) break;
       offset += pageSize;
