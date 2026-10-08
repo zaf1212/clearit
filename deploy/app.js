@@ -637,7 +637,7 @@
       if (tab === 'student') {
         var res = await DB.loginStudent(id, pass);
         if (!res || !res.ok) {
-          showLoginError((res && res.error) || 'Invalid credentials. Try 2023-5548 / password123.');
+          showLoginError((res && res.error) || 'Invalid credentials. Please check your Student ID and password.');
           return;
         }
         currentUser = {
@@ -658,7 +658,7 @@
       } else {
         var res2 = await DB.loginSignatory(id, pass);
         if (!res2 || !res2.ok) {
-          showLoginError((res2 && res2.error) || 'Invalid email or password. Try glen.tabucanon@tcc.edu.ph / admin123.');
+          showLoginError((res2 && res2.error) || 'Invalid email or password. Please check your email and password.');
           return;
         }
         currentUser = {
@@ -809,10 +809,15 @@
   function persistRemember () {
     try {
       if ($('#remember-me').checked) {
+        // The password is deliberately NOT written here. Persisting it stores a
+        // live credential in cleartext on disk, readable by anything that can
+        // read localStorage - device access, a shared machine, or injected
+        // script. Remember-me records WHO to sign in as, never HOW to prove it;
+        // the user types the password once per visit until Supabase Auth owns
+        // the session (see SECURITY_PLAN.md).
         localStorage.setItem('clearit_remember', JSON.stringify({
           tab:  currentLoginTab,
           id:   $('#login-id').value.trim(),
-          pass: $('#login-password').value,
           role: $('#signatory-role').value
         }));
       } else {
@@ -826,9 +831,16 @@
       var raw = localStorage.getItem('clearit_remember');
       if (!raw) return;
       var d = JSON.parse(raw);
+      // Builds before this change stored the password in cleartext. Purge it on
+      // sight rather than leaving a usable credential sitting on disk, then keep
+      // only the identity fields.
+      if (d.pass) {
+        delete d.pass;
+        localStorage.setItem('clearit_remember', JSON.stringify(d));
+      }
       setLoginTab(d.tab === 'signatory' ? 'signatory' : 'student');
       $('#login-id').value = d.id || '';
-      $('#login-password').value = d.pass || '';
+      $('#login-password').value = '';
       $('#remember-me').checked = true;
       if (d.role) $('#signatory-role').value = d.role;
     } catch (e) { /* ignore */ }

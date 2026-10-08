@@ -1,20 +1,20 @@
-# ── Local-only environment files ─────────────────────────────────────────
-# .env.local mirrors the PUBLIC anon key + URL for local convenience.
-# The app loads real config from supabaseConfig.js (committed). Keep these
-# local-only by convention.
+# Secrets — the Supabase service-role key must never be committed.
+# It grants full bypass of every row-level security policy, so it must never
+# reach the browser either. See SECURITY_PLAN.md.
 .env
 .env.local
-.env.*
-!.env.example
+.env.*.local
+service-key.local.env
+*.local.env
+service-key.local.txt
 
-# ── Supabase CLI local state (regenerated on `supabase link`) ────────────
-supabase/.temp/
+# Node
+node_modules/
 
-# ── Logs & OS junk ───────────────────────────────────────────────────────
-*.log
-npm-debug.log*
+# OS / editor
 .DS_Store
 Thumbs.db
-desktop.ini
-# Local Netlify folder
-.netlify
+
+# Tool scratch (Netlify CLI, Supabase CLI) — not part of the site
+.netlify/
+supabase/.temp/
