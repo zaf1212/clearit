@@ -348,16 +348,32 @@
 
   // Renders the signature image for one signatory cell on the printable form.
   // Returns an <img> only when the requirement is actually cleared AND a valid
-  // snapshot exists; a pending or On Hold requirement always gets an empty slot,
+  // source exists; a pending or On Hold requirement always gets an empty slot,
   // so a signature can never appear above a line that was never signed.
-  function signatureImgTag (sig) {
+  //
+  // `cls` is optional and only used for the small thumbnail in the summary
+  // table; the signature grid leaves it off.
+  function signatureImgTag (sig, cls) {
     if (!sig || sig.status !== 'cleared') return '';
     if (!isValidSignatureSource(sig.signatureUrl)) return '';
     // Prefer the bytes inlined by sigResolveImagesForPrint so the print window
     // has nothing left to download; fall back to the stored URL if inlining
     // failed, which still renders whenever the network cooperates.
     var src = sigInlinedSrc[sig.signatureUrl] || sig.signatureUrl;
-    return '<img src="' + src + '" alt="">';
+    return '<img' + (cls ? ' class="' + cls + '"' : '') + ' src="' + src + '" alt="">';
+  }
+
+  // The printable form's stand-in for a signature that must NOT be shown:
+  // a requirement that is still pending or was flagged / disapproved. The
+  // signatory's name and image are withheld in that case, and this badge tells
+  // the reader why the line is blank.
+  function sigStatusBadge (sig) {
+    var status = (sig && sig.status) || 'pending';
+    if (status === 'cleared') return '';
+    if (status === 'hold') {
+      return '<span class="sig-badge sig-badge-hold">On Hold</span>';
+    }
+    return '<span class="sig-badge sig-badge-pending">Pending</span>';
   }
 
   function catIdFromKey(key) {
@@ -866,19 +882,32 @@
   function buildSignatures (rows) {
     var sigs = {};
     SIG_KEYS.forEach(function (k) {
-      sigs[k] = { status: 'pending', remark: '', date: '', signatoryName: SIG_NAMES[k] || '', signatureUrl: '' };
+      sigs[k] = {
+        status: 'pending', remark: '', date: '',
+        signatoryName: SIG_NAMES[k] || '',
+        role: SIG_LABELS[k] || '',
+        signatureUrl: ''
+      };
     });
     rows.forEach(function (r) {
       if (sigs[r.category_key] !== undefined) {
+        // Prefer the values read LIVE from the signatories table (merged in by
+        // DB.getStudentClearance) and fall back to the approval-time snapshot.
+        // A record approved before its officer saved a signature therefore
+        // still has a name and image to print, with no re-approve required.
+        var liveUrl = r.live_signature_url || '';
+        var snapUrl = r.signature_url || '';
         sigs[r.category_key] = {
           status: r.status,
           remark: r.remarks || '',
           date:   r.signed_at ? formatDate(r.signed_at) : '',
-          signatoryName: r.signatory_name || SIG_NAMES[r.category_key] || '',
-          // The signature SNAPSHOT taken when this requirement was approved, not
-          // the signatory's current one. A pre-migration database has no such
-          // column, hence the || ''.
-          signatureUrl: r.signature_url || ''
+          signatoryName: r.live_signatory_name || r.signed_by_name || r.signatory_name || SIG_NAMES[r.category_key] || '',
+          role: r.live_role || r.category_name || SIG_LABELS[r.category_key] || '',
+          // The live signature wins; the snapshot is the fallback for a
+          // database that has no signature_url on signatories yet.
+          signatureUrl: isValidSignatureSource(liveUrl)
+            ? liveUrl
+            : (isValidSignatureSource(snapUrl) ? snapUrl : '')
         };
       }
     });
@@ -913,7 +942,10 @@
 
     $('#sv-initials').textContent  = initials(name);
     $('#sv-user-full').textContent = name;
-    $('#sd-initials').textContent  = initials(name);
+    // The profile summary no longer renders an initials avatar; guard so the
+    // dashboard (and therefore the print button) still renders without it.
+    var sdInitials = $('#sd-initials');
+    if (sdInitials) sdInitials.textContent = initials(name);
     $('#sd-name').textContent      = name;
     $('#sd-id').textContent        = currentUser.iId;
     $('#sd-block').textContent     = currentUser.block;
@@ -924,15 +956,6 @@
     $('#sd-semester').textContent  = currentSemester || '';
     $('#sd-ay').textContent        = currentAY || '';
     $('#sd-status').textContent    = currentUser.enrollmentStatus || '';
-
-    var paidStamp = $('#sd-paid-stamp');
-    if (currentUser.paid) {
-      paidStamp.classList.remove('hidden');
-      var pd = currentUser.paidDate ? formatDate(currentUser.paidDate) : '';
-      paidStamp.title = pd ? 'Paid on ' + pd : 'Paid';
-    } else {
-      paidStamp.classList.add('hidden');
-    }
 
     $('#sd-percent').textContent     = p.pct;
     $('#sd-percent-big').textContent = p.pct + '%';
@@ -989,9 +1012,9 @@
     if (blockedSem) {
       $('#sd-download-hint').textContent = 'Cannot download: ' + termLabel(currentSemester, currentAY) + ' clearance is blocked until your previous semester obligations are resolved.';
     } else if (done) {
-      $('#sd-download-hint').textContent = 'All requirements cleared. The official clearance printout includes the Validation Seal, QR verification, and Control Number.';
+      $('#sd-download-hint').textContent = 'All requirements cleared. Every office prints its Role / Designation, full name and signature pulled live \u2014 no re-approval needed. The official form also includes the Validation Seal, QR verification, and Control Number.';
     } else {
-      $('#sd-download-hint').textContent = 'You may print an UNOFFICIAL draft now \u2014 it is marked "PENDING APPROVAL". The Official Seal, QR verification, and Control Number appear only after all 10 requirements are cleared (' + (100 - p.pct) + '% remaining).';
+      $('#sd-download-hint').textContent = 'You may print an UNOFFICIAL draft now \u2014 it is marked "PENDING APPROVAL". Approved offices print their name and signature automatically; pending or flagged items show a status badge instead. The Official Seal, QR verification, and Control Number appear only after all 10 requirements are cleared (' + (100 - p.pct) + '% remaining).';
     }
   }
 
@@ -1011,7 +1034,12 @@
         yearLevel: yearLevel || '', sectionBlock: sectionBlock || '', sigs: {}
       };
       SIG_KEYS.forEach(function (k) {
-        map[id].sigs[k] = { status: 'pending', remark: '', date: '', signatoryName: SIG_NAMES[k] || '' };
+        map[id].sigs[k] = {
+          status: 'pending', remark: '', date: '',
+          signatoryName: SIG_NAMES[k] || '',
+          role: SIG_LABELS[k] || '',
+          signatureUrl: ''
+        };
       });
     }
     semesterStudents.forEach(function (s) {
@@ -1024,7 +1052,8 @@
         sig.status = r.status;
         sig.remark = r.remarks || '';
         sig.date   = r.signed_at ? formatDate(r.signed_at) : '';
-        sig.signatoryName = r.signatory_name || SIG_NAMES[r.category_key] || '';
+        sig.signatoryName = r.signed_by_name || r.signatory_name || SIG_NAMES[r.category_key] || '';
+        sig.role = r.category_name || SIG_LABELS[r.category_key] || '';
       }
     });
     return Object.values(map);
@@ -2816,6 +2845,42 @@
     await Promise.all(jobs);
   }
 
+  // Refresh the printable form from the signatories table itself, immediately
+  // before the template is generated.
+  //
+  // Why this exists: fn_approve_clearance copies the officer's signature_url
+  // onto the clearance record AT APPROVAL TIME. If the officer had not saved a
+  // signature yet (or the record predates clearit_signature_migration.sql),
+  // that snapshot is NULL and the form prints a blank line. The only way to fix
+  // that used to be to flag the student and approve them again, which rewrote
+  // the snapshot. Reading the live rows here makes signatures appear on the
+  // first print preview with no re-approval, and picks up a signature the
+  // officer has since replaced.
+  async function sigHydrateFromSignatories (sigs) {
+    var directory;
+    try {
+      directory = await DB.getSignatorySignatures();
+    } catch (e) {
+      // Non-fatal: the snapshot merged in by buildSignatures still renders.
+      console.warn('[CLEARIT] Could not refresh signatory signatures for print:', e);
+      return;
+    }
+
+    var byKey = {};
+    directory.forEach(function (d) {
+      if (d.category_key) byKey[d.category_key] = d;
+    });
+
+    SIG_KEYS.forEach(function (k) {
+      var s = sigs[k];
+      var d = byKey[k];
+      if (!s || !d) return;
+      if (isValidSignatureSource(d.signature_url)) s.signatureUrl = d.signature_url;
+      if (d.full_name)      s.signatoryName = d.full_name;
+      if (d.category_name)  s.role = d.category_name;
+    });
+  }
+
   async function downloadClearance () {
     if (!currentUser || currentUser.type !== 'student') return;
     if (studentPrereqBlocked) {
@@ -2826,7 +2891,13 @@
     var p = progressOf(sigs);
     var allCleared = p.pct === 100;
 
-    // Pull any remote signature down into this document first, so the form we
+    // First refresh the role, full name and CURRENT signature_url straight from
+    // the signatories table. This is what makes an approved signatory's
+    // signature appear the first time the print preview opens - no flag /
+    // re-approve cycle needed.
+    await sigHydrateFromSignatories(sigs);
+
+    // Then pull any remote signature down into this document, so the form we
     // are about to write is not waiting on the network to finish drawing itself.
     // Failure is tolerated - see sigResolveImagesForPrint.
     await sigResolveImagesForPrint(sigs);
@@ -2895,18 +2966,33 @@
 
     var htmlRows = '';
     SIG_KEYS.forEach(function (k) {
-      var d = sigs[k];
-      var check = d.status === 'cleared' ? '&#10003;' : '&mdash;';
-      var text  = d.status === 'cleared' ? 'Cleared' : d.status === 'hold' ? 'On Hold' : 'Pending';
-      var date  = d.date || '&mdash;';
-      var signatoryDisplay = SIG_LABELS[k];
-      if (d.signatoryName) signatoryDisplay += ' \u2014 ' + d.signatoryName;
-      htmlRows += '<tr><td>' + signatoryDisplay + '</td><td style="text-align:center">' + check + '</td><td style="text-align:center">' + text + '</td><td style="text-align:center">' + date + '</td></tr>';
-    });
+      var d = sigs[k] || { status: 'pending' };
+      var approved = d.status === 'cleared';
 
-    var paidHTML = currentUser.paid
-      ? '<div style="position:absolute;top:18px;right:18px;border:3px solid #047857;color:#047857;font-weight:800;font-size:18px;padding:6px 18px;transform:rotate(-12deg);letter-spacing:.08em;">PAID</div>'
-      : '';
+      // Role / Designation is always shown so the reader knows which office the
+      // line belongs to. The person's full name is only shown once that office
+      // has APPROVED - a pending or flagged requirement withholds it.
+      var roleTxt = escapeHtml(d.role || SIG_LABELS[k] || '');
+      var nameTxt = (approved && d.signatoryName) ? escapeHtml(d.signatoryName) : '';
+      var signatoryDisplay = '<span class="cell-role">' + roleTxt + '</span>' +
+        (nameTxt ? '<br><span class="cell-name">' + nameTxt + '</span>' : '');
+
+      // Approved: the actual signature image (the check is the fallback when
+      // the officer genuinely has no signature on file). Not approved: no image
+      // at all, and the status badge explains why the line is blank.
+      var sigCell = approved ? (signatureImgTag(d, 'mini-sig') || '&#10003;') : '&mdash;';
+      var statusCell = approved
+        ? '<span class="pill pill-cleared">&#10003; Cleared</span>'
+        : (d.status === 'hold'
+            ? '<span class="pill pill-hold">On Hold</span>'
+            : '<span class="pill pill-pending">Pending</span>');
+      var date = approved ? (d.date || '&mdash;') : '&mdash;';
+
+      htmlRows += '<tr><td>' + signatoryDisplay + '</td>' +
+        '<td style="text-align:center">' + sigCell + '</td>' +
+        '<td style="text-align:center">' + statusCell + '</td>' +
+        '<td style="text-align:center">' + date + '</td></tr>';
+    });
 
     var html =
       '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Clearance \u2014 ' + currentUser.name + '</title>' +
@@ -2932,6 +3018,13 @@
       '.ctrl{font-size:10.5px;font-weight:800;color:#0f172a;letter-spacing:.05em;}' +
       '.stamp-unofficial{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-14deg);border:3px solid #b91c1c;color:#b91c1c;font-weight:800;font-size:20px;letter-spacing:.12em;padding:10px 30px;border-radius:6px;opacity:.9;background:rgba(255,255,255,.55);z-index:5;text-align:center;white-space:nowrap;}' +
       '.unofficial-note{margin:22px auto 0;max-width:560px;text-align:center;color:#b91c1c;font-weight:600;font-size:11.5px;border:1.5px solid #fecaca;background:#fef2f2;padding:10px 14px;border-radius:8px;}' +
+      '.cell-role{font-weight:700;color:#0f172a;}' +
+      '.cell-name{color:#334155;}' +
+      '.mini-sig{display:inline-block;max-height:26px;max-width:120px;object-fit:contain;object-position:center;vertical-align:middle;}' +
+      '.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}' +
+      '.pill-cleared{background:#d1fae5;color:#047857;border:1px solid #6ee7b7;}' +
+      '.pill-pending{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}' +
+      '.pill-hold{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;}' +
       '@page{size:A4;margin:12mm;}' +
       '@media print{' +
       'body{padding:0;}' +
@@ -2948,6 +3041,9 @@
       // depending on who has signed.
       '.sig .sigimg{height:46px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:3px;}' +
       '.sig .sigimg img{max-height:44px;max-width:90%;object-fit:contain;object-position:bottom center;}' +
+      '.sig .sig-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1.4;margin-bottom:8px;}' +
+      '.sig .sig-badge-pending{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}' +
+      '.sig .sig-badge-hold{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;}' +
       '.sig .name{font-weight:700;color:#0f172a;font-size:11.5px;min-height:17px;line-height:1.3;margin-bottom:6px;}' +
       '.sig .line{border-top:1px solid #334155;}' +
       '.sig .role{color:#475569;margin-top:5px;line-height:1.3;}' +
@@ -2958,7 +3054,6 @@
       '.footer .reminder{color:#b91c1c;font-weight:700;font-size:11px;text-align:center;}' +
       '.foot{margin-top:14px;text-align:center;font-size:10px;color:#64748b;}' +
       '</style></head><body><div class="sheet">' +
-      paidHTML +
       '<div class="head"><div class="school">TALISAY CITY COLLEGE</div><h1>CLEARANCE FORM</h1>' +
       '<div class="sub">College of Information Technology &mdash; CLEARIT</div></div>' +
       '<div class="info">' +
@@ -2970,24 +3065,26 @@
       '<div><b>Academic Year</b>SY ' + (currentUser.academicYear || '2025-2026') + '</div>' +
       '<div><b>Status</b>' + (currentUser.enrollmentStatus || 'Regular') + '</div>' +
       '</div>' +
-      '<table><tr><th>Signatory</th><th style="text-align:center">Signature</th><th style="text-align:center">Status</th><th style="text-align:center">Date Signed</th></tr>' + htmlRows + '</table>' +
+      '<table><tr><th>Role / Designation</th><th style="text-align:center">Signature</th><th style="text-align:center">Status</th><th style="text-align:center">Date Signed</th></tr>' + htmlRows + '</table>' +
       verifyZone +
       '<div class="sigs">' +
       SIG_KEYS.filter(function (k) { return k !== 'president'; }).map(function (k) {
-        var d = sigs[k];
-        var nameTxt = (d.status === 'cleared' && d.signatoryName) ? d.signatoryName : '';
+        var d = sigs[k] || { status: 'pending' };
+        var approved = d.status === 'cleared';
+        var nameTxt = (approved && d.signatoryName) ? escapeHtml(d.signatoryName) : '';
+        var roleTxt = escapeHtml(d.role || SIG_LABELS[k] || '');
         return '<div class="sig">' +
-          '<div class="sigimg">' + signatureImgTag(d) + '</div>' +
+          '<div class="sigimg">' + (approved ? signatureImgTag(d) : sigStatusBadge(d)) + '</div>' +
           '<div class="name">' + (nameTxt || '&nbsp;') + '</div>' +
           '<div class="line"></div>' +
-          '<div class="role">' + SIG_LABELS[k] + '</div>' +
+          '<div class="role">' + roleTxt + '</div>' +
           '</div>';
       }).join('') +
       '<div class="sig president">' +
-        '<div class="sigimg">' + signatureImgTag(sigs.president) + '</div>' +
-        '<div class="name">' + ((sigs.president && sigs.president.status === 'cleared' && sigs.president.signatoryName) ? sigs.president.signatoryName : '&nbsp;') + '</div>' +
+        '<div class="sigimg">' + (sigs.president && sigs.president.status === 'cleared' ? signatureImgTag(sigs.president) : sigStatusBadge(sigs.president)) + '</div>' +
+        '<div class="name">' + ((sigs.president && sigs.president.status === 'cleared' && sigs.president.signatoryName) ? escapeHtml(sigs.president.signatoryName) : '&nbsp;') + '</div>' +
         '<div class="line"></div>' +
-        '<div class="role">' + (SIG_LABELS.president || 'College President (Final Approval)') + '</div>' +
+        '<div class="role">' + escapeHtml((sigs.president && sigs.president.role) || SIG_LABELS.president || 'College President (Final Approval)') + '</div>' +
       '</div>' +
       '</div>' +
       '<div class="footer"><p class="reminder">IMPORTANT REMINDER: Kindly present this accomplished Clearance Form to the Admission Committee upon enrollment.</p></div>' +

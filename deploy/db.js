@@ -47,6 +47,46 @@ var DB = (function () {
     return data || [];
   }
 
+  // ── Signatory directory (full name + live signature per office) ─────────
+  //
+  // The printable clearance form draws a signature for every APPROVED
+  // requirement. A clearance record only stores a SNAPSHOT of the signature
+  // taken by fn_approve_clearance at approval time, which means a record that
+  // was approved before its officer had saved a signature (or before
+  // clearit_signature_migration.sql was run) carries a NULL snapshot and would
+  // print a blank line until somebody re-approved it.
+  //
+  // Reading the signatories table itself at print time removes that manual
+  // step: the current signature_url and full_name are used directly. Returned
+  // rows are joined to their category so the caller can key them by the same
+  // category_key used by the clearance records.
+  async function getSignatorySignatures () {
+    var attempts = [
+      'id, full_name, category_id, signature_url, signatory_categories(id, key, name)',
+      'id, full_name, category_id, signatory_categories(id, key, name)'
+    ];
+    var data = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await window.supabase.from('signatories').select(attempts[i]);
+      if (!r.error) { data = r.data || []; lastErr = null; break; }
+      lastErr = r.error;
+    }
+    if (!data) throw friendlyError(lastErr, 'Could not load signatory signatures');
+
+    return data.map(function (row) {
+      var cat = row.signatory_categories || {};
+      return {
+        id:            row.id,
+        full_name:     row.full_name || '',
+        category_id:   row.category_id || cat.id || null,
+        category_key:  cat.key || '',
+        category_name: cat.name || '',
+        // Absent on a pre-migration database, hence the || ''.
+        signature_url: row.signature_url || ''
+      };
+    });
+  }
+
   // ── Auth: student login (query + bcryptjs verify) ──────────────────────
   async function loginStudent (institutionalId, password) {
     var data = null;
@@ -160,6 +200,29 @@ var DB = (function () {
       lastErr = r.error;
     }
     if (!rows) throw friendlyError(lastErr, 'Could not load your clearance');
+
+    // Merge the signatory table's CURRENT full_name / signature_url into every
+    // row. The printable form uses these live values, so an approval made
+    // before the officer saved a signature still prints that signature without
+    // a manual re-approve. Best effort: a pre-migration database (or an RLS
+    // policy that hides signatories) falls back to the stored snapshot.
+    try {
+      var directory = await getSignatorySignatures();
+      var byKey = {};
+      directory.forEach(function (d) {
+        if (d.category_key) byKey[d.category_key] = d;
+      });
+      rows.forEach(function (r) {
+        var d = byKey[r.category_key];
+        if (!d) return;
+        r.live_signatory_name  = d.full_name;
+        r.live_role            = d.category_name || r.category_name || '';
+        r.live_signature_url   = d.signature_url;
+      });
+    } catch (e) {
+      console.warn('[CLEARIT] Could not load signatory signatures:', e);
+    }
+
     return rows;
   }
 
@@ -933,6 +996,7 @@ var DB = (function () {
   // ── Public API ─────────────────────────────────────────────────────────
   return {
     getCategories:          getCategories,
+    getSignatorySignatures: getSignatorySignatures,
     loginStudent:           loginStudent,
     loginSignatory:         loginSignatory,
     getStudentClearance:    getStudentClearance,
