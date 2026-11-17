@@ -341,7 +341,7 @@ var DB = (function () {
       if (!seen[key]) { seen[key] = true; out.push({ semester: sem, academic_year: ay }); }
     }
 
-    // Prefer semesters registered by the SAS Director (even if no clearance
+    // Prefer semesters registered by the OSAS Director (even if no clearance
     // records exist yet), then fall back to whatever clearance data exists.
     try {
       var sres = await window.supabase.from('semesters').select('semester, academic_year');
@@ -646,7 +646,7 @@ var DB = (function () {
     return true;
   }
 
-  // ── Admin (SAS Director): reset a student's change counter back to 0 ───
+  // ── Admin (OSAS Director): reset a student's change counter back to 0 ───
   async function resetPasswordChangeCount (studentUUID) {
     var { error } = await window.supabase
       .from('students')
@@ -664,7 +664,7 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not update the student');
   }
 
-  // ── SAS Director: batch-assign Year Level + Section/Block to students ──
+  // ── OSAS Director: batch-assign Year Level + Section/Block to students ──
   // updates: [{ id, year_level, section_block, year_block }]. Also rewrites
   // the legacy combined year_block so every existing dashboard that displays
   // it (student + signatory views) reflects the new value immediately.
@@ -739,7 +739,7 @@ var DB = (function () {
     return data || 0;
   }
 
-  // ── SAS Director: one-call "Initialize New Semester" wizard ──────────────
+  // ── OSAS Director: one-call "Initialize New Semester" wizard ──────────────
   // opts: { semester, academicYear, mode: 'roll_forward'|'custom',
   //         studentIds: [], promote: bool, yearLevel, sectionBlock,
   //         activate: bool, sasEmail }
@@ -767,7 +767,7 @@ var DB = (function () {
     return data || {};
   }
 
-  // ── SAS Director: apply an uploaded CSV roster row by row ───────────────
+  // ── OSAS Director: apply an uploaded CSV roster row by row ───────────────
   // rows: [{ institutional_id, academic_status, year_level, section_block }]
   async function applyRosterUpload (rows, sasEmail) {
     var { data, error } = await window.supabase.rpc('fn_apply_roster_upload', {
@@ -782,7 +782,7 @@ var DB = (function () {
     return data || {};
   }
 
-  // ── SAS Director: quick status toggles (Dropped / Suspended / ...) ─────
+  // ── OSAS Director: quick status toggles (Dropped / Suspended / ...) ─────
   async function setStudentAcademicStatus (studentIds, academicStatus, sasEmail) {
     var { data, error } = await window.supabase.rpc('fn_set_student_academic_status', {
       p_student_ids:     studentIds,
@@ -806,7 +806,7 @@ var DB = (function () {
     return /does not exist|not found|42883|PGRST202|schema cache/i.test(msg);
   }
 
-  // ── Semester management (SAS Director access is enforced inside the RPCs) ──
+  // ── Semester management (OSAS Director access is enforced inside the RPCs) ──
   async function getSemesters () {
     var { data, error } = await window.supabase
       .from('semesters')

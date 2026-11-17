@@ -42,6 +42,13 @@
   var SIG_LABELS = {};   // key → category name
   var SIG_NAMES  = {};   // key → signatory office holder name
 
+  // The office formerly labelled "SAS" is now "OSAS" (Office of Student
+  // Affairs Services). Keep the database value intact; normalise only what
+  // the user sees on dashboards and printable forms.
+  function officeLabel (name) {
+    return String(name || '').replace('Student Affairs Services Director', 'OSAS Director');
+  }
+
   var SIGNATORY_EMAILS = {
     treasury:        'arnel.zafra@tcc.edu.ph',
     campusMinistry:  'riza.archival@tcc.edu.ph',
@@ -55,10 +62,10 @@
     president:       'richel.bacaltos@tcc.edu.ph'
   };
 
-  // Student password change limit (self-service). The SAS Director can reset
+  // Student password change limit (self-service). The OSAS Director can reset
   // a student's counter back to 0 from Manage Students.
   var PW_MAX = 3;
-  var PW_WARNING = 'You have reached the maximum limit of 3 password changes. Please visit the Student Affairs Services (SAS) Office for assistance with resetting your password.';
+  var PW_WARNING = 'You have reached the maximum limit of 3 password changes. Please visit OSAS (Office of Student Affairs Services) for assistance with resetting your password.';
 
   /* ===================== Module state ===================== */
 
@@ -121,7 +128,7 @@
   var adminStudentList     = [];  // all students for admin panel
   var adminEditTarget      = null; // student UUID being edited
 
-  // Semester Clearance Management (SAS Director) state
+  // Semester Clearance Management (OSAS Director) state
   var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active }]
   var semesterEditTarget = null; // semester entry being edited
 
@@ -453,7 +460,7 @@
     fillAllSemesterSelects();
   }
 
-  // Access control: only the SAS Director (Mrs. Jennilyn D. Geagonia) may
+  // Access control: only the OSAS Director (Mrs. Jennilyn D. Geagonia) may
   // create, edit, or activate semesters. All other roles are blocked.
   function isSASDirector () {
     return !!(currentUser &&
@@ -724,7 +731,7 @@
       console.error('[CLEARIT] Could not load semester options:', err);
     }
 
-    // Default everyone to the SAS Director's active semester on login.
+    // Default everyone to the OSAS Director's active semester on login.
     var defaultSem = null, defaultAY = null;
     if (activeSem && activeSem.semester && activeSem.academic_year) {
       defaultSem = activeSem.semester;
@@ -775,14 +782,14 @@
         showView('signatory');
         toast('Signed in as ' + currentUser.catName + '.', 'info');
 
-        // RBAC: only the Student Affairs Services Director gets the Manage Students button
+        // RBAC: only the OSAS Director gets the Manage Students button
         $('#sa-manage-students').classList.toggle('hidden', !isSASDirector());
 
-        // RBAC: only the SAS Director gets Semester Clearance Management
+        // RBAC: only the OSAS Director gets Semester Clearance Management
         var isSAS = isSASDirector();
         $('#sa-semester-mgmt').classList.toggle('hidden', !isSAS);
 
-        // RBAC: only the SAS Director gets Manage Blocks & Sections
+        // RBAC: only the OSAS Director gets Manage Blocks & Sections
         $('#sa-blocks-mgmt').classList.toggle('hidden', !isSAS);
 
         // Every signatory needs a signature, so this button is not role-gated.
@@ -902,7 +909,7 @@
           remark: r.remarks || '',
           date:   r.signed_at ? formatDate(r.signed_at) : '',
           signatoryName: r.live_signatory_name || r.signed_by_name || r.signatory_name || SIG_NAMES[r.category_key] || '',
-          role: r.live_role || r.category_name || SIG_LABELS[r.category_key] || '',
+          role: officeLabel(r.live_role || r.category_name || SIG_LABELS[r.category_key] || ''),
           // The live signature wins; the snapshot is the fallback for a
           // database that has no signature_url on signatories yet.
           signatureUrl: isValidSignatureSource(liveUrl)
@@ -1053,7 +1060,7 @@
         sig.remark = r.remarks || '';
         sig.date   = r.signed_at ? formatDate(r.signed_at) : '';
         sig.signatoryName = r.signed_by_name || r.signatory_name || SIG_NAMES[r.category_key] || '';
-        sig.role = r.category_name || SIG_LABELS[r.category_key] || '';
+        sig.role = officeLabel(r.category_name || SIG_LABELS[r.category_key] || '');
       }
     });
     return Object.values(map);
@@ -1210,7 +1217,7 @@
         '</b> until their previous semester obligations are resolved \u2014 <b>Approve is disabled</b> for them.';
     }
 
-    // SAS Director: when the SELECTED semester has zero records, offer the
+    // OSAS Director: when the SELECTED semester has zero records, offer the
     // one-click "Initialize Clearances for this Term" prompt.
     var canInitBanner = !hasRecords && isSASDirector();
     $('#sa-init-banner').classList.toggle('hidden', !canInitBanner);
@@ -1219,7 +1226,7 @@
         '. Initialize to generate 10 pending records per active student.';
     }
 
-    // Dynamic empty state (SAS gets init guidance, everyone else filter help).
+    // Dynamic empty state (OSAS gets init guidance, everyone else filter help).
     if (filtered.length === 0) {
       if (canInitBanner) {
         $('#sa-empty').innerHTML =
@@ -1271,10 +1278,10 @@
   /* ===================== Admin Student Management modal ===================== */
 
   function openAdminModal () {
-    // Defense-in-depth: only the SAS Director may open Student Management,
+    // Defense-in-depth: only the OSAS Director may open Student Management,
     // even if the hidden button were somehow triggered by another role.
     if (!isSASDirector()) {
-      toast('Access denied. Only the Student Affairs Services Director can manage students.', 'error');
+      toast('Access denied. Only the OSAS Director can manage students.', 'error');
       return;
     }
     $('#admin-modal').classList.remove('hidden');
@@ -1367,7 +1374,7 @@
     $('#admin-list-empty').classList.toggle('hidden', filtered.length > 0);
   }
 
-  /* ===================== SAS Director: Student Status Quick Actions ===================== */
+  /* ===================== OSAS Director: Student Status Quick Actions ===================== */
 
   function findAdminStudent (id) {
     for (var i = 0; i < adminStudentList.length; i++) {
@@ -1497,7 +1504,7 @@
     adminEditTarget = null;
   }
 
-  // SAS Director override: reset a student's password change counter to 0.
+  // OSAS Director override: reset a student's password change counter to 0.
   async function resetAdminPasswordCount () {
     if (!adminEditTarget) return;
     var btn = $('#admin-reset-pw-count');
@@ -1569,7 +1576,7 @@
 
     if (newPass) {
       fields.password_hash = window.bcrypt.hashSync(newPass, 10);
-      // SAS resetting the password also resets the student's change limit.
+      // OSAS resetting the password also resets the student's change limit.
       fields.password_change_count = 0;
     }
 
@@ -1689,11 +1696,11 @@
     }
   }
 
-  /* ===================== Semester Clearance Management (SAS Director only) ===================== */
+  /* ===================== Semester Clearance Management (OSAS Director only) ===================== */
 
   async function openSemesterMgmtModal () {
     if (!isSASDirector()) {
-      toast('Access denied. Only the SAS Director can manage semesters.', 'error');
+      toast('Access denied. Only the OSAS Director can manage semesters.', 'error');
       return;
     }
     $('#semester-mgmt-modal').classList.remove('hidden');
@@ -1707,7 +1714,7 @@
     resetSemesterWizard();
     loadSemesterMgmtList();
     // The wizard's status census and custom-roster previews are both derived from
-    // the full roster, so wait for it before the SAS Director reaches step 3.
+    // the full roster, so wait for it before the OSAS Director reaches step 3.
     // Rendered in parallel with the semester list — neither blocks the other.
     await loadAdminStudentList();
   }
@@ -1866,7 +1873,7 @@
     }
   }
 
-  // Roster-wide census so the SAS Director can see exactly who will be
+  // Roster-wide census so the OSAS Director can see exactly who will be
   // carried over and who will be skipped, before committing.
   function renderStatusCensus () {
     var host = $('#sm-status-census');
@@ -2174,7 +2181,7 @@
       if (currentUser.type === 'student') await refreshStudentData();
       else await refreshSignatoryData();
 
-      // Build the summary the SAS Director actually needs to see.
+      // Build the summary the OSAS Director actually needs to see.
       var parts = [];
       parts.push((result.records_created || 0) + ' pending clearance record(s) created for ' +
         (result.cohort_size || 0) + ' student(s).');
@@ -2321,7 +2328,7 @@
     }
   }
 
-  // One-click "Initialize Clearances for this Term" (SAS Director only).
+  // One-click "Initialize Clearances for this Term" (OSAS Director only).
   // Stamps every active student's semester tags to the selected term, then
   // generates 10 pending clearance records per active student via fn_init_clearance.
   async function initializeSelectedTerm () {
@@ -2877,7 +2884,7 @@
       if (!s || !d) return;
       if (isValidSignatureSource(d.signature_url)) s.signatureUrl = d.signature_url;
       if (d.full_name)      s.signatoryName = d.full_name;
-      if (d.category_name)  s.role = d.category_name;
+      if (d.category_name)  s.role = officeLabel(d.category_name);
     });
   }
 
@@ -3141,7 +3148,7 @@
 
   /* ===================== Change Password (role-based) ===================== */
   // Students are capped at PW_MAX self-service changes (counter enforced).
-  // Signatories and SAS Directors (role 'signatory' / 'sas_director') change
+  // Signatories and OSAS Directors (role 'signatory' / 'sas_director') change
   // their password anytime — counter bypassed, never incremented.
 
   function pwRemaining () {
@@ -3184,7 +3191,7 @@
   // Secure recovery: the public login page never writes new passwords.
   // Students identify their account and receive a Supabase email recovery
   // link/code (supabase.auth.resetPasswordForEmail); signatory/admin resets
-  // are intentionally restricted to the SAS Director / System Administrator.
+  // are intentionally restricted to the OSAS Director / System Administrator.
 
   function openForgotModal () {
     setForgotRole(currentLoginTab === 'signatory' ? 'signatory' : 'student');
@@ -3298,7 +3305,7 @@
 
   /* ===================== Student Help & FAQ modal ===================== */
   // Floating "Need Help? / FAQ" button (Student Portal only) opens an
-  // accordion modal with common clearance questions + direct SAS contact.
+  // accordion modal with common clearance questions + direct OSAS contact.
 
   function openFaqItem (item) {
     item.classList.add('open');
@@ -3447,7 +3454,7 @@
     renderSignatory();
   }
 
-  /* ===================== Blocks & Sections management (SAS Director) ===================== */
+  /* ===================== Blocks & Sections management (OSAS Director) ===================== */
 
   var blocksStudents    = [];   // all students loaded for the modal
   var blocksSelected    = {};   // student UUID -> true
@@ -3694,7 +3701,7 @@
     SIG_LABELS = {};
     SIG_NAMES  = {};
     categories.forEach(function (c) {
-      SIG_LABELS[c.key] = c.name;
+      SIG_LABELS[c.key] = officeLabel(c.name);
       SIG_NAMES[c.key]  = c.signatory_name || '';
     });
 
@@ -3713,7 +3720,7 @@
       var hdr = '<th class="px-4 py-3 font-semibold min-w-[170px]">Student</th>' +
                 '<th class="px-2 py-3 font-semibold">Year / Block</th>';
       categories.forEach(function (c) {
-        hdr += '<th class="px-2 py-3 font-semibold text-center" data-sig-col="' + c.key + '">' + c.name.replace('Student Conduct & Discipline Officer','Discipline').replace('Campus Ministry In-charge','Campus Min.').replace('Student Organization Coordinator','Org Coord.').replace('Student Affairs Services Director','SAO Dir.').replace('College President (Final Approval)','President').replace('Treasury In-charge','Treasury').replace('College Librarian','Librarian').replace('College Property Custodian','Property').replace('Program Dean','Dean').replace('College Registrar','Registrar') + '</th>';
+        hdr += '<th class="px-2 py-3 font-semibold text-center" data-sig-col="' + c.key + '">' + c.name.replace('Student Conduct & Discipline Officer','Discipline').replace('Campus Ministry In-charge','Campus Min.').replace('Student Organization Coordinator','Org Coord.').replace('Student Affairs Services Director','OSAS Dir.').replace('College President (Final Approval)','President').replace('Treasury In-charge','Treasury').replace('College Librarian','Librarian').replace('College Property Custodian','Property').replace('Program Dean','Dean').replace('College Registrar','Registrar') + '</th>';
       });
       hdr += '<th class="px-3 py-3 font-semibold min-w-[100px]">Overall</th>' +
              '<th class="px-3 py-3 font-semibold min-w-[140px]">My Notes</th>' +
@@ -3802,7 +3809,7 @@
     $('#pw-cancel').addEventListener('click', closePasswordModal);
     $('#pw-backdrop').addEventListener('click', closePasswordModal);
 
-    // ── Digital signature (every signatory, not just the SAS Director) ──────
+    // ── Digital signature (every signatory, not just the OSAS Director) ──────
     $('#sa-signature-btn').addEventListener('click', openSignatureModal);
     $('#signature-close').addEventListener('click', closeSignatureModal);
     $('#signature-backdrop').addEventListener('click', closeSignatureModal);
@@ -4116,7 +4123,7 @@
       refreshSignatoryData();
     });
 
-    // Blocks & Sections management (SAS Director only)
+    // Blocks & Sections management (OSAS Director only)
     $('#sa-blocks-mgmt').addEventListener('click', openBlocksModal);
     $('#blocks-close').addEventListener('click', closeBlocksModal);
     $('#blocks-backdrop').addEventListener('click', closeBlocksModal);
@@ -4166,13 +4173,13 @@
       if (btn) openAdminEdit(btn.dataset.adminEdit);
     });
 
-    // SAS Director quick actions: set academic status straight from the table
+    // OSAS Director quick actions: set academic status straight from the table
     $('#admin-student-list').addEventListener('change', function (e) {
       var sel = e.target.closest('select[data-admin-status]');
       if (sel) quickSetStudentStatus(sel);
     });
 
-    // SAS Director quick action: edit a student's Section / Block in place
+    // OSAS Director quick action: edit a student's Section / Block in place
     $('#admin-student-list').addEventListener('change', function (e) {
       var input = e.target.closest('input[data-admin-block]');
       if (input) quickSetStudentBlock(input);
@@ -4188,7 +4195,7 @@
       saveAdminEdit();
     });
 
-    // SAS Director: reset a student's password change limit
+    // OSAS Director: reset a student's password change limit
     $('#admin-reset-pw-count').addEventListener('click', resetAdminPasswordCount);
 
     // Register new student
@@ -4200,7 +4207,7 @@
       submitAdminRegister();
     });
 
-    // Semester Clearance Management (SAS Director only)
+    // Semester Clearance Management (OSAS Director only)
     $('#sa-semester-mgmt').addEventListener('click', openSemesterMgmtModal);
     $('#semester-mgmt-close').addEventListener('click', closeSemesterMgmtModal);
     $('#semester-mgmt-backdrop').addEventListener('click', closeSemesterMgmtModal);

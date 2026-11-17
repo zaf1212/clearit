@@ -100,7 +100,7 @@ Non-destructive: it only *adds* users. Safe to run while RLS is still `allow_all
 
 1. Drop `password_hash` from `students` and `signatories`.
 2. Drop the five `allow_all` policies.
-3. Replace the SAS director email hardcode at `app.js:443` with a role column.
+3. Replace the OSAS director email hardcode at `app.js:443` with a role column.
 
 ## Ordering risk — do not skip
 
