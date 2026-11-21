@@ -656,12 +656,25 @@ var DB = (function () {
   }
 
   // ── Admin: update a student ────────────────────────────────────────────
+  // Return the updated row so callers can confirm the write actually landed.
+  // Supabase returns an empty array when RLS silently blocks the UPDATE, so an
+  // empty result is treated as a failure rather than a successful no-op.
   async function updateStudent (studentUUID, fields) {
-    var { error } = await window.supabase
+    var { data, error } = await window.supabase
       .from('students')
       .update(fields)
-      .eq('id', studentUUID);
-    if (error) throw friendlyError(error, 'Could not update the student');
+      .eq('id', studentUUID)
+      .select('id, institutional_id, full_name, password_hash');
+    if (error) {
+      var raw = (error && error.message) ? error.message : String(error || 'Unknown error');
+      console.error('[CLEARIT] Student UPDATE failed:', error);
+      throw new Error(friendlyError(error, 'Could not update the student').message +
+        ' (Supabase: ' + raw + ')');
+    }
+    if (!data || !data.length) {
+      throw new Error('Student update did not affect any row. The record may be missing or blocked by Supabase RLS.');
+    }
+    return data[0];
   }
 
   // ── OSAS Director: batch-assign Year Level + Section/Block to students ──

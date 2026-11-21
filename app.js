@@ -1665,23 +1665,9 @@
       enrollment_status: status
     };
 
-    // academic_status only exists after the migration. If the save fails because
-    // of the missing column, retry without it so the rest of the edit still lands.
-    if (ACADEMIC_STATUSES.indexOf(acadStatus) !== -1) {
-      var withStatus = Object.assign({}, fields, { academic_status: acadStatus });
-      try {
-        await DB.updateStudent(adminEditTarget.id, withStatus);
-        adminEditTarget.academicStatus = acadStatus;
-        toast('Student updated successfully!', 'success');
-        closeAdminEdit();
-        await loadAdminStudentList();
-        return;
-      } catch (err) {
-        if (!/academic_status|42703|column/i.test(String((err && err.message) || ''))) throw err;
-        console.warn('[CLEARIT] academic_status unavailable — saving without it. Run clearit_academic_status_migration.sql.', err);
-      }
-    }
-
+    // Student login verifies bcrypt.compareSync(password, students.password_hash),
+    // so the admin reset must write that SAME column with the SAME hash format.
+    // Build it before any early-return branch so the password is never skipped.
     if (newPass) {
       fields.password_hash = window.bcrypt.hashSync(newPass, 10);
       // OSAS resetting the password also resets the student's change limit.
@@ -1693,16 +1679,34 @@
     $('#admin-edit-error').classList.add('hidden');
 
     try {
-      await DB.updateStudent(adminEditTarget.id, fields);
+      var updated = null;
+
+      // academic_status only exists after the migration. If the save fails because
+      // of the missing column, retry without it so the rest of the edit still lands.
+      if (ACADEMIC_STATUSES.indexOf(acadStatus) !== -1) {
+        var withStatus = Object.assign({}, fields, { academic_status: acadStatus });
+        try {
+          updated = await DB.updateStudent(adminEditTarget.id, withStatus);
+          adminEditTarget.academicStatus = acadStatus;
+        } catch (err) {
+          if (!/academic_status|42703|column/i.test(String((err && err.message) || ''))) throw err;
+          console.warn('[CLEARIT] academic_status unavailable — saving without it. Run clearit_academic_status_migration.sql.', err);
+        }
+      }
+
+      if (!updated) updated = await DB.updateStudent(adminEditTarget.id, fields);
+      if (!updated) throw new Error('Student update did not return the updated row.');
+
       toast('Student updated successfully!', 'success');
       closeAdminEdit();
       await loadAdminStudentList();
     } catch (err) {
-      console.error(err);
+      console.error('[CLEARIT] Could not save student:', err);
       var detail = (err && err.message) ? err.message : String(err);
       if (detail.indexOf('23505') !== -1) {
         $('#admin-edit-error').textContent = 'That Student ID or Email already exists for another student.';
       } else {
+        // Includes the raw Supabase message (e.g. RLS denial) from db.js.
         $('#admin-edit-error').textContent = 'Update failed: ' + detail;
       }
       $('#admin-edit-error').classList.remove('hidden');
