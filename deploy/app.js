@@ -284,8 +284,90 @@
   function $(sel) { return document.querySelector(sel); }
   function $$(sel) { return Array.prototype.slice.call(document.querySelectorAll(sel)); }
 
+  /* Student names are stored as "Last, First Middle" (e.g. "Dela Cruz, Juan B.").
+     The database only has a single full_name column, so the split form fields are
+     composed into that one value. splitStudentName() is only used to prefill the
+     edit form; legacy names are never rewritten on display. */
+  var SURNAME_PREFIXES = [
+    'de', 'del', 'dela', 'de la', 'de los', 'di', 'la', 'le', 'ma', 'san',
+    'sta', 'st', 'sto', 'mc', 'mac', 'van', 'von', 'bin', 'ibn'
+  ];
+
+  function composeStudentName (last, first, middle) {
+    last   = String(last   || '').trim();
+    first  = String(first  || '').trim();
+    middle = String(middle || '').trim();
+
+    if (!last && !first && !middle) return '';
+    if (last && first) return last + ', ' + first + (middle ? ' ' + middle : '');
+    if (last) return last + (middle ? ', ' + middle : '');
+    return first + (middle ? ' ' + middle : '');
+  }
+
+  function splitStudentName (fullName) {
+    var name = String(fullName || '').trim();
+    if (!name) return { last: '', first: '', middle: '' };
+
+    var comma = name.indexOf(',');
+    if (comma !== -1) {
+      var rest = name.slice(comma + 1).trim().split(/\s+/).filter(Boolean);
+      return {
+        last:   name.slice(0, comma).trim(),
+        first:  rest.shift() || '',
+        middle: rest.join(' ')
+      };
+    }
+
+    // Legacy value such as "Juan B. Dela Cruz" or "Jerame Abing".
+    var tokens = name.split(/\s+/).filter(Boolean);
+    var first = tokens.shift() || '';
+    if (!tokens.length) return { last: '', first: first, middle: '' };
+
+    var prefixStart = -1;
+    var prefixLen = 0;
+    for (var i = 0; i < tokens.length; i++) {
+      var word = tokens[i].toLowerCase().replace(/\./g, '');
+      var next = i + 1 < tokens.length ? tokens[i + 1].toLowerCase().replace(/\./g, '') : '';
+      var twoWord = next ? (word + ' ' + next) : '';
+      if (SURNAME_PREFIXES.indexOf(twoWord) !== -1) {
+        prefixStart = i;
+        prefixLen = 2;
+        break;
+      }
+      if (SURNAME_PREFIXES.indexOf(word) !== -1) {
+        prefixStart = i;
+        prefixLen = 1;
+        break;
+      }
+    }
+
+    if (prefixStart >= 0) {
+      return {
+        last:   tokens.slice(prefixStart, prefixStart + prefixLen).join(' ') +
+                (prefixStart + prefixLen < tokens.length
+                  ? ' ' + tokens.slice(prefixStart + prefixLen).join(' ') : ''),
+        first:  first,
+        middle: tokens.slice(0, prefixStart).join(' ')
+      };
+    }
+
+    return {
+      last:   tokens[tokens.length - 1],
+      first:  first,
+      middle: tokens.slice(0, -1).join(' ')
+    };
+  }
+
+  function firstNameOf (fullName) {
+    var parsed = splitStudentName(fullName);
+    return parsed.first || parsed.last || 'there';
+  }
+
   function initials(name) {
-    return name.split(/\s+/).slice(0, 2).map(function (w) { return w.charAt(0); }).join('').toUpperCase();
+    var parsed = splitStudentName(name);
+    var a = parsed.first || parsed.last || '';
+    var b = parsed.first ? (parsed.last || parsed.middle) : parsed.middle;
+    return (a.charAt(0) + (b ? b.charAt(0) : '')).toUpperCase();
   }
 
   function todayStr() {
@@ -759,7 +841,7 @@
         renderStudent();
         subscribeStudentRealtime();
         showView('student');
-        toast('Welcome back, ' + currentUser.name.split(' ')[0] + '!', 'success');
+        toast('Welcome back, ' + firstNameOf(currentUser.name) + '!', 'success');
       } catch (err) {
         console.error(err);
         toast('Failed to load clearance data: ' + err.message, 'error');
@@ -1491,8 +1573,11 @@
     if (!student) { toast('Student not found.', 'error'); return; }
 
     adminEditTarget = student;
+    var nameParts = splitStudentName(student.full_name);
     $('#admin-edit-id').value = student.id;
-    $('#admin-edit-name').value = student.full_name;
+    $('#admin-edit-last').value = nameParts.last;
+    $('#admin-edit-first').value = nameParts.first;
+    $('#admin-edit-middle').value = nameParts.middle;
     $('#admin-edit-iid').value = student.institutional_id;
     $('#admin-edit-email').value = student.email || '';
     $('#admin-edit-block').value = student.year_block || '';
@@ -1548,7 +1633,10 @@
   async function saveAdminEdit () {
     if (!adminEditTarget) return;
 
-    var name    = $('#admin-edit-name').value.trim();
+    var lastName  = $('#admin-edit-last').value.trim();
+    var firstName = $('#admin-edit-first').value.trim();
+    var middleName = $('#admin-edit-middle').value.trim();
+    var name    = composeStudentName(lastName, firstName, middleName);
     var iid     = $('#admin-edit-iid').value.trim();
     var email   = $('#admin-edit-email').value.trim();
     var block   = $('#admin-edit-block').value.trim();
@@ -1560,8 +1648,8 @@
     var acadStatus = acadSel ? acadSel.value : 'Active';
     var newPass = $('#admin-edit-password').value;
 
-    if (!name || !iid) {
-      $('#admin-edit-error').textContent = 'Full Name and Institutional ID are required.';
+    if (!lastName || !firstName || !iid) {
+      $('#admin-edit-error').textContent = 'Last Name, First Name, and Institutional ID are required.';
       $('#admin-edit-error').classList.remove('hidden');
       return;
     }
@@ -1630,7 +1718,9 @@
     $('#admin-edit-panel').classList.add('hidden');
     $('#admin-register-panel').classList.remove('hidden');
 
-    $('#reg-name').value = '';
+    $('#reg-last').value = '';
+    $('#reg-first').value = '';
+    $('#reg-middle').value = '';
     $('#reg-iid').value = '';
     $('#reg-email').value = '';
     // No default program: silently pre-selecting one (as this previously did
@@ -1647,7 +1737,7 @@
     $('#reg-status').value = 'Regular';
     $('#reg-password').value = '123456';
     $('#admin-register-error').classList.add('hidden');
-    $('#reg-name').focus();
+    $('#reg-last').focus();
   }
 
   function closeAdminRegister () {
@@ -1656,7 +1746,10 @@
   }
 
   async function submitAdminRegister () {
-    var name    = $('#reg-name').value.trim();
+    var lastName   = $('#reg-last').value.trim();
+    var firstName  = $('#reg-first').value.trim();
+    var middleName = $('#reg-middle').value.trim();
+    var name    = composeStudentName(lastName, firstName, middleName);
     var iid     = $('#reg-iid').value.trim();
     var email   = $('#reg-email').value.trim();
     var program = $('#reg-program').value;
@@ -1673,8 +1766,8 @@
     var status  = $('#reg-status').value;
     var pass    = $('#reg-password').value;
 
-    if (!name || !iid) {
-      $('#admin-register-error').textContent = 'Full Name and Institutional ID are required.';
+    if (!lastName || !firstName || !iid) {
+      $('#admin-register-error').textContent = 'Last Name, First Name, and Institutional ID are required.';
       $('#admin-register-error').classList.remove('hidden');
       return;
     }
@@ -1691,10 +1784,17 @@
 
     var hash = window.bcrypt.hashSync(pass, 10);
 
+    // Build the fallback email from the given/surname parts so a comma in
+    // "Dela Cruz, Juan B." never leaks into the address.
+    var emailSeed = [firstName, lastName].join('.').toLowerCase()
+      .replace(/[^a-z0-9.]/g, '')
+      .replace(/\.+/g, '.')
+      .replace(/^\.|\.$/g, '') || 'student';
+
     var fields = {
       full_name:         name,
       institutional_id:  iid,
-      email:             email || (name.toLowerCase().replace(/\s+/g, '.').replace(/[^a-z0-9.]/g, '') + '@tcc.edu.ph'),
+      email:             email || (emailSeed + '@tcc.edu.ph'),
       password_hash:     hash,
       year_block:        block,
       program:           program,
