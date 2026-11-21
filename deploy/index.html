@@ -1251,7 +1251,7 @@
               </div>
               <div>
                 <label for="admin-edit-block" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year / Block</label>
-                <input id="admin-edit-block" type="text"
+                <input id="admin-edit-block" type="text" list="section-options"
                   class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
               </div>
               <div>
@@ -1346,25 +1346,19 @@
                 </select>
               </div>
               <div>
-                <label for="reg-block" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level &amp; Section</label>
-                <select id="reg-block" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
-                  <option value="1st Year / Charity">1st Year / Charity</option>
-                  <option value="1st Year / Faith">1st Year / Faith</option>
-                  <option value="1st Year / Hope">1st Year / Hope</option>
-                  <option value="2nd Year / Charity">2nd Year / Charity</option>
-                  <option value="2nd Year / Faith">2nd Year / Faith</option>
-                  <option value="2nd Year / Hope">2nd Year / Hope</option>
-                  <option value="2nd Year / Love">2nd Year / Love</option>
-                  <option value="3rd Year / Charity">3rd Year / Charity</option>
-                  <option value="3rd Year / Faith">3rd Year / Faith</option>
-                  <option value="3rd Year / Generosity">3rd Year / Generosity</option>
-                  <option value="3rd Year / Hope">3rd Year / Hope</option>
-                  <option value="3rd Year / Love">3rd Year / Love</option>
-                  <option value="4th Year / Charity">4th Year / Charity</option>
-                  <option value="4th Year / Faith">4th Year / Faith</option>
-                  <option value="4th Year / Hope">4th Year / Hope</option>
-                  <option value="4th Year / Love">4th Year / Love</option>
+                <label for="reg-year" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Year Level</label>
+                <select id="reg-year" class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
+                  <option>1st Year</option>
+                  <option>2nd Year</option>
+                  <option>3rd Year</option>
+                  <option>4th Year</option>
                 </select>
+              </div>
+              <div>
+                <label for="reg-section" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Section / Block</label>
+                <input id="reg-section" type="text" list="section-options" placeholder="e.g. BSIT 1-A"
+                  class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+                <p class="mt-1 text-[10px] text-slate-400">Suggestions come from Manage Blocks &amp; Sections.</p>
               </div>
               <div>
                 <label for="reg-semester" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Semester</label>

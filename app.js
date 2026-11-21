@@ -1637,7 +1637,11 @@
     // with BSINDTECH-COMPTECH) files new students under a course nobody chose.
     // fillProgramSelect leaves the empty choice selected.
     fillProgramSelect($('#reg-program'));
-    $('#reg-block').value = '1st Year / Charity';
+    // Sections are managed in the Blocks modal and stored in localStorage;
+    // refresh the shared suggestions every time the register form is opened.
+    rebuildSectionDatalist();
+    $('#reg-year').value = '1st Year';
+    $('#reg-section').value = 'Charity';
     $('#reg-semester').value = '2nd Semester';
     $('#reg-ay').value = '2025-2026';
     $('#reg-status').value = 'Regular';
@@ -1656,7 +1660,14 @@
     var iid     = $('#reg-iid').value.trim();
     var email   = $('#reg-email').value.trim();
     var program = $('#reg-program').value;
-    var block   = $('#reg-block').value;
+    var year    = $('#reg-year').value;
+    var section = $('#reg-section').value.trim();
+    // Keep the legacy combined value for dashboards that read year_block, but
+    // derive it from the same standalone Section list used by Blocks management.
+    // If someone pastes a combined value, don't prefix the year twice.
+    var block = section.indexOf('/') !== -1
+      ? section
+      : (year && section ? (year + ' / ' + section) : (year || section));
     var sem     = $('#reg-semester').value;
     var ay      = $('#reg-ay').value.trim();
     var status  = $('#reg-status').value;
@@ -3692,6 +3703,10 @@
   /* ===================== Events ===================== */
 
   async function init () {
+    // Section suggestions live in localStorage. Load them on every page start
+    // so a custom section is available even if the Blocks modal was never opened.
+    rebuildSectionDatalist();
+
     // 1) Await the Supabase ESM client before running any queries.
     //    This prevents "Could not connect" errors on slow networks where the
     //    async module import finishes after DOMContentLoaded.
