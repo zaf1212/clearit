@@ -360,34 +360,34 @@
     <div class="max-w-[1400px] mx-auto px-4 py-8 fade-in">
       <!-- Stats -->
       <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="all" aria-pressed="true">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Total Students</span>
             <span class="w-8 h-8 rounded-lg bg-navy-50 text-navy-700 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg></span>
           </div>
           <div id="sa-total" class="mt-2 text-3xl font-extrabold text-navy-800">0</div>
-        </div>
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        </button>
+        <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="cleared" aria-pressed="false">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Fully Cleared</span>
             <span class="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span>
           </div>
           <div id="sa-cleared" class="mt-2 text-3xl font-extrabold text-emerald-600">0</div>
-        </div>
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        </button>
+        <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="pending" aria-pressed="false">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Pending</span>
             <span class="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span>
           </div>
           <div id="sa-pending" class="mt-2 text-3xl font-extrabold text-amber-500">0</div>
-        </div>
-        <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+        </button>
+        <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="hold" aria-pressed="false">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">On Hold</span>
             <span class="w-8 h-8 rounded-lg bg-red-50 text-red-600 flex items-center justify-center"><svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg></span>
           </div>
           <div id="sa-hold" class="mt-2 text-3xl font-extrabold text-red-500">0</div>
-        </div>
+        </button>
       </div>
 
       <!-- Prerequisite warning: students with outstanding previous-semester

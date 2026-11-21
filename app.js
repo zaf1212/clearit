@@ -159,6 +159,10 @@
   var semesterStudents = [];
   var allClearanceRows = [];
 
+  // Signatory dashboard status filter driven by the four summary cards.
+  // 'all' shows the full cohort; the other values match overallOf() statuses.
+  var saStatusFilter = 'all';
+
   // Prerequisite (previous-semester) clearance state:
   // prevClearanceRows = records for the term BEFORE the selected one
   // blockedStudents   = { student_id: true } when that term has pending/hold
@@ -719,6 +723,8 @@
   async function enterApp () {
     $('#login-password').value = '';
     hideLoginError();
+    saStatusFilter = 'all';
+    updateSaStatusCards();
 
     // Load available semester options for the dropdown and the "Current Active
     // Semester" system flag (not critical if it fails).
@@ -817,6 +823,8 @@
     blockedStudents = {};
     studentPrereqBlocked = false;
     studentPrereqMsg = '';
+    saStatusFilter = 'all';
+    updateSaStatusCards();
     semesterMgmtList = [];
     semesterEditTarget = null;
     $('#sa-manage-students').classList.add('hidden');
@@ -1066,11 +1074,21 @@
     return Object.values(map);
   }
 
+  function updateSaStatusCards () {
+    document.querySelectorAll('.sa-stat-card').forEach(function (card) {
+      var active = card.getAttribute('data-status-filter') === saStatusFilter;
+      card.classList.toggle('sa-stat-active', active);
+      card.setAttribute('aria-pressed', active ? 'true' : 'false');
+    });
+  }
+
   function renderSignatory () {
     var key = currentUser.catKey;
     var q   = $('#sa-search').value.trim().toLowerCase();
     var yr  = $('#sa-year-filter').value;
     var blk = $('#sa-block-filter').value;
+
+    updateSaStatusCards();
 
     // True when the selected semester has clearance records at all.
     var hasRecords = allClearanceRows.length > 0;
@@ -1121,12 +1139,14 @@
     });
     if (curVal) sel.value = curVal;
 
-    // Filter
+    // Filter — the status-card filter is combined with the existing search,
+    // year-level and section dropdowns rather than replacing them.
     var filtered = students.filter(function (st) {
       var okYr  = !yr || st.yearLevel === yr;
       var okBlk = !blk || (st.sectionBlock || st.block) === blk;
       var okQ   = !q || st.name.toLowerCase().indexOf(q) !== -1 || st.iId.toLowerCase().indexOf(q) !== -1;
-      return okYr && okBlk && okQ;
+      var okStatus = saStatusFilter === 'all' || overallOf(st.sigs) === saStatusFilter;
+      return okYr && okBlk && okQ && okStatus;
     });
 
     $('#sa-count').textContent = filtered.length;
@@ -4000,6 +4020,15 @@
     });
     $('#sa-block-filter').addEventListener('change', function () {
       if (currentUser && currentUser.type === 'signatory') renderSignatory();
+    });
+
+    // Summary cards double as status filters for the table below.
+    document.querySelectorAll('.sa-stat-card').forEach(function (card) {
+      card.addEventListener('click', function () {
+        saStatusFilter = this.getAttribute('data-status-filter') || 'all';
+        updateSaStatusCards();
+        if (currentUser && currentUser.type === 'signatory') renderSignatory();
+      });
     });
 
     // Signatory table actions (delegated)

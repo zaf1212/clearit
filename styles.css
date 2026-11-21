@@ -423,3 +423,75 @@ body.dark-theme {
 /* The saved/preview badge is the only coloured element on the plate row, so it
    keeps its own contrast rather than following the dark remap. */
 .dark-theme #sig-state { background-color: #334155; color: #e2e8f0; }
+
+/* ===================== Signatory dashboard status cards =====================
+   The summary numbers are buttons that filter the student table. Keep the
+   pointer affordance, lift-on-hover and a colored ring on the selected card. */
+.sa-stat-card {
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background-color 0.18s ease;
+}
+
+.sa-stat-card:hover {
+  transform: translateY(-2px);
+  border-color: #93b0e2;
+  box-shadow: 0 12px 24px -14px rgba(15, 23, 42, 0.55);
+}
+
+.sa-stat-card:focus-visible {
+  outline: 2px solid var(--navy);
+  outline-offset: 2px;
+}
+
+.sa-stat-card.sa-stat-active {
+  border-color: var(--navy);
+  box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.18), 0 10px 20px -14px rgba(15, 23, 42, 0.45);
+}
+
+.sa-stat-card[data-status-filter="cleared"].sa-stat-active {
+  border-color: #059669;
+  box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.18), 0 10px 20px -14px rgba(5, 150, 105, 0.35);
+}
+
+.sa-stat-card[data-status-filter="pending"].sa-stat-active {
+  border-color: #d97706;
+  box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.18), 0 10px 20px -14px rgba(217, 119, 6, 0.35);
+}
+
+.sa-stat-card[data-status-filter="hold"].sa-stat-active {
+  border-color: #dc2626;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.18), 0 10px 20px -14px rgba(220, 38, 38, 0.35);
+}
+
+/* Dark theme keeps the rings vivid instead of letting the slate border
+   overrides hide the selected state. */
+.dark-theme .sa-stat-card:hover {
+  border-color: #648ad3;
+  box-shadow: 0 12px 24px -14px rgba(0, 0, 0, 0.85);
+}
+
+.dark-theme .sa-stat-card:focus-visible {
+  outline-color: #38bdf8;
+}
+
+.dark-theme .sa-stat-card.sa-stat-active {
+  border-color: #648ad3;
+  box-shadow: 0 0 0 3px rgba(100, 138, 211, 0.28), 0 10px 20px -14px rgba(0, 0, 0, 0.85);
+}
+
+.dark-theme .sa-stat-card[data-status-filter="cleared"].sa-stat-active {
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(52, 211, 153, 0.28), 0 10px 20px -14px rgba(0, 0, 0, 0.85);
+}
+
+.dark-theme .sa-stat-card[data-status-filter="pending"].sa-stat-active {
+  border-color: #fbbf24;
+  box-shadow: 0 0 0 3px rgba(251, 191, 36, 0.28), 0 10px 20px -14px rgba(0, 0, 0, 0.85);
+}
+
+.dark-theme .sa-stat-card[data-status-filter="hold"].sa-stat-active {
+  border-color: #f87171;
+  box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.28), 0 10px 20px -14px rgba(0, 0, 0, 0.85);
+}
