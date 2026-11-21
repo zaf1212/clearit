@@ -3894,30 +3894,6 @@
       if (e.key === 'Escape' && !$('#forgot-modal').classList.contains('hidden')) closeForgotModal();
     });
 
-    // Demo buttons
-    $('#demo-student-btn').addEventListener('click', function () {
-      setLoginTab('student');
-      $('#login-id').value = '2023-5548';
-      $('#login-password').value = 'password123';
-      attemptLogin('student', '2023-5548', 'password123', '');
-    });
-
-    $('#demo-signatory-btn').addEventListener('click', function () {
-      setLoginTab('signatory');
-      $('#signatory-role').value = 'dean';
-      $('#login-id').value = 'glen.tabucanon@tcc.edu.ph';
-      $('#login-password').value = 'admin123';
-      attemptLogin('signatory', 'glen.tabucanon@tcc.edu.ph', 'admin123', 'dean');
-    });
-
-    $('#demo-sas-btn').addEventListener('click', function () {
-      setLoginTab('signatory');
-      $('#signatory-role').value = 'studentAffairs';
-      $('#login-id').value = 'jennilyn.geagonia@tcc.edu.ph';
-      $('#login-password').value = 'admin123';
-      attemptLogin('signatory', 'jennilyn.geagonia@tcc.edu.ph', 'admin123', 'studentAffairs');
-    });
-
     // Auto-fill email when signatory role is selected
     $('#signatory-role').addEventListener('change', function () {
       var key = this.value;
