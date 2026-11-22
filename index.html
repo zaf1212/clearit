@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261122d" />
+  <link rel="stylesheet" href="styles.css?v=20261122e" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261122d"></script>
+  <script src="supabaseConfig.js?v=20261122e"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261122d"></script>
-  <script src="db.js?v=20261122d"></script>
+  <script src="supabaseClient.js?v=20261122e"></script>
+  <script src="db.js?v=20261122e"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -1075,10 +1075,10 @@
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"></path></svg>
               </span>
               <div>
-                <h4 class="font-bold text-slate-800">Create New Section / Block</h4>
+                <h4 class="font-bold text-slate-800">Create / Remove Sections &amp; Blocks</h4>
                 <p class="text-[11px] text-slate-500 leading-relaxed">
-                  Add a quick-pick suggestion for the Section / Block fields. This only adds it to the list
-                  above — assigning students is still done with <b>Assign Selected Students To</b>.
+                  Add a quick-pick suggestion, or click the trash icon on any section above to remove it from the list.
+                  This only changes suggestions — students already assigned to a removed section are not affected.
                 </p>
               </div>
             </div>
@@ -1518,6 +1518,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261122d"></script>
+  <script src="app.js?v=20261122e"></script>
 </body>
 </html>

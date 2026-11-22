@@ -3793,6 +3793,7 @@
     'BSIT 3-A', 'BSIT 3-B', 'BSIT 4-A'
   ];
   var BLOCKS_SECTIONS_KEY = 'clearit-sections';
+  var BLOCKS_REMOVED_SECTIONS_KEY = 'clearit-removed-sections';
 
   function escapeHtml (s) {
     return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
@@ -3800,6 +3801,42 @@
 
   function isDefaultBlockSection (s) {
     return BLOCKS_DEFAULT_SECTIONS.map(function (d) { return d.toLowerCase(); }).indexOf(String(s).toLowerCase()) !== -1;
+  }
+
+  function getRemovedBlockSections () {
+    var saved = [];
+    try {
+      var raw = JSON.parse(localStorage.getItem(BLOCKS_REMOVED_SECTIONS_KEY) || '[]');
+      if (Array.isArray(raw)) {
+        saved = raw.filter(function (s) { return typeof s === 'string' && s.trim(); })
+                   .map(function (s) { return s.trim(); });
+      }
+    } catch (e) { saved = []; }
+    var seen = {}, out = [];
+    saved.forEach(function (s) {
+      var key = s.toLowerCase();
+      if (seen[key]) return;
+      seen[key] = true;
+      out.push(s);
+    });
+    return out;
+  }
+
+  function saveRemovedBlockSections (sections) {
+    try { localStorage.setItem(BLOCKS_REMOVED_SECTIONS_KEY, JSON.stringify(sections)); }
+    catch (e) { /* storage unavailable: removal stays session-only */ }
+  }
+
+  function isRemovedBlockSection (s) {
+    var key = String(s).toLowerCase();
+    return getRemovedBlockSections().some(function (r) { return r.toLowerCase() === key; });
+  }
+
+  function unremoveBlockSection (s) {
+    var key = String(s).toLowerCase();
+    saveRemovedBlockSections(getRemovedBlockSections().filter(function (r) {
+      return r.toLowerCase() !== key;
+    }));
   }
 
   function getBlocksSections () {
@@ -3813,7 +3850,7 @@
     var seen = {}, out = [];
     BLOCKS_DEFAULT_SECTIONS.concat(saved).forEach(function (s) {
       var key = s.toLowerCase();
-      if (seen[key]) return;
+      if (seen[key] || isRemovedBlockSection(s)) return;
       seen[key] = true;
       out.push(s);
     });
@@ -3821,7 +3858,9 @@
   }
 
   function saveBlocksSections (sections) {
-    var custom = sections.filter(function (s) { return !isDefaultBlockSection(s); });
+    var custom = sections.filter(function (s) {
+      return !isDefaultBlockSection(s) && !isRemovedBlockSection(s);
+    });
     try { localStorage.setItem(BLOCKS_SECTIONS_KEY, JSON.stringify(custom)); }
     catch (e) { /* storage unavailable: suggestions stay session-only */ }
   }
@@ -3845,16 +3884,18 @@
       return;
     }
     wrap.innerHTML = sections.map(function (s) {
-      var btn;
-      if (isDefaultBlockSection(s)) {
-        btn = '<span class="inline-flex items-center gap-1 rounded-full bg-slate-100 text-slate-700 pl-3 pr-2.5 py-1 text-xs font-semibold ring-1 ring-inset ring-slate-200">' +
-          escapeHtml(s) + '<span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">default</span></span>';
-      } else {
-        btn = '<button type="button" data-blocks-remove-section="' + escapeHtml(s) + '" title="Remove suggestion" class="inline-flex items-center gap-1 rounded-full bg-navy-50 text-navy-700 pl-3 pr-1.5 py-1 text-xs font-semibold ring-1 ring-inset ring-navy-100 hover:bg-navy-100 transition">' +
-          escapeHtml(s) +
-          '<svg class="w-3 h-3 text-navy-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg></button>';
-      }
-      return btn;
+      var def = isDefaultBlockSection(s);
+      var safe = escapeHtml(s);
+      return '<button type="button" data-blocks-remove-section="' + safe + '" ' +
+          'title="Remove section ' + safe + '" aria-label="Remove section ' + safe + '" ' +
+          'class="group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-xs font-semibold ring-1 ring-inset transition ' +
+          (def
+            ? 'bg-slate-100 text-slate-700 ring-slate-200 hover:bg-red-50 hover:text-red-700 hover:ring-red-200'
+            : 'bg-navy-50 text-navy-700 ring-navy-100 hover:bg-red-50 hover:text-red-700 hover:ring-red-200') + '">' +
+          safe +
+          (def ? '<span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">default</span>' : '') +
+          '<svg class="w-3 h-3 text-slate-400 group-hover:text-red-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+        '</button>';
     }).join('');
   }
 
@@ -3866,6 +3907,7 @@
     var existing = getBlocksSections().map(function (s) { return s.toLowerCase(); });
     if (existing.indexOf(name.toLowerCase()) !== -1) { toast('That section already exists.', 'error'); return; }
     var sections = getBlocksSections();
+    unremoveBlockSection(name); // re-adding a previously removed default must restore it
     sections.push(name);
     saveBlocksSections(sections);
     $('#blocks-assign-section').value = name;   // next assign target, ready to go
@@ -3880,9 +3922,13 @@
     var btn = ev.target.closest('[data-blocks-remove-section]');
     if (!btn || !isSASDirector()) return;
     var name = btn.getAttribute('data-blocks-remove-section');
-    var sections = getBlocksSections().filter(function (s) { return s !== name; });
+    var key = name.toLowerCase();
+    var sections = getBlocksSections().filter(function (s) { return s.toLowerCase() !== key; });
+    var removed = getRemovedBlockSections();
+    if (!removed.some(function (r) { return r.toLowerCase() === key; })) removed.push(name);
+    saveRemovedBlockSections(removed);
     saveBlocksSections(sections);
-    if ($('#blocks-assign-section').value === name) $('#blocks-assign-section').value = '';
+    if ($('#blocks-assign-section').value.toLowerCase() === key) $('#blocks-assign-section').value = '';
     renderBlocksSectionsList();
     rebuildSectionDatalist();
     toast('Removed "' + name + '" from the section list.', 'success');
