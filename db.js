@@ -913,6 +913,63 @@ var DB = (function () {
     return data || [];
   }
 
+  // Page through a table so the Semesters table has no hidden 1,000-row cap.
+  async function selectAllRows (table, columns) {
+    var all = [], from = 0, pageSize = 1000;
+    for (;;) {
+      var r = await window.supabase.from(table).select(columns).range(from, from + pageSize - 1);
+      if (r.error) throw friendlyError(r.error, 'Could not load ' + table);
+      var rows = r.data || [];
+      all = all.concat(rows);
+      if (rows.length < pageSize) break;
+      from += pageSize;
+    }
+    return all;
+  }
+
+  // ── Complete semester registry: semesters table + terms found in records ─
+  // Terms that only exist in clearance_records are kept (id = null) so nothing
+  // is hidden from the OSAS Director. clearance_count drives the delete warning.
+  async function getAllSemesters () {
+    var rows = await selectAllRows('semesters', 'id, semester, academic_year, is_active, created_at');
+    var records = await selectAllRows('clearance_records', 'semester, academic_year');
+
+    var counts = {};
+    records.forEach(function (r) {
+      if (!r.semester || !r.academic_year) return;
+      var key = r.academic_year + '|' + r.semester;
+      counts[key] = (counts[key] || 0) + 1;
+    });
+
+    var seen = {}, out = [];
+    rows.forEach(function (s) {
+      var key = s.academic_year + '|' + s.semester;
+      seen[key] = true;
+      out.push({
+        id: s.id,
+        semester: s.semester,
+        academic_year: s.academic_year,
+        is_active: !!s.is_active,
+        created_at: s.created_at,
+        clearance_count: counts[key] || 0,
+        registered: true
+      });
+    });
+    Object.keys(counts).forEach(function (key) {
+      if (seen[key]) return;
+      var parts = key.split('|');
+      out.push({
+        id: null,
+        semester: parts[1],
+        academic_year: parts[0],
+        is_active: false,
+        clearance_count: counts[key],
+        registered: false
+      });
+    });
+    return out;
+  }
+
   async function getActiveSemester () {
     var { data, error } = await window.supabase
       .from('semesters')
@@ -941,14 +998,94 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not set the active semester');
   }
 
-  async function updateSemester (semesterId, semesterName, academicYear, sasEmail) {
+  async function updateSemester (semesterId, semesterName, academicYear, sasEmail, oldSemester, oldAcademicYear) {
+    // Preferred path (clearit_semester_delete.sql): renames the term on the
+    // semester row AND on every related clearance/student record, with a
+    // transaction-local bypass of the past-term history guard.
+    if (oldSemester && oldAcademicYear) {
+      var full = await window.supabase.rpc('fn_update_semester_full', {
+        p_semester_id:       semesterId || null,
+        p_semester:          semesterName,
+        p_academic_year:     academicYear,
+        p_old_semester:      oldSemester,
+        p_old_academic_year: oldAcademicYear,
+        p_sas_email:         sasEmail
+      });
+      if (!full.error) return;
+      if (!isMissingFunction(full.error)) {
+        var rawFull = (full.error && full.error.message) ? full.error.message : String(full.error);
+        console.error('[CLEARIT] Semester UPDATE failed:', full.error);
+        throw new Error(friendlyError(full.error, 'Could not update the semester').message +
+          ' (Supabase: ' + rawFull + ')');
+      }
+    }
+
+    // Legacy fallback: only the semesters row is renamed. Terms found solely in
+    // clearance_records must first be registered so the legacy RPC has an id.
+    var id = semesterId;
+    if (!id) {
+      var up = await window.supabase.rpc('fn_upsert_semester', {
+        p_semester: oldSemester || semesterName,
+        p_academic_year: oldAcademicYear || academicYear,
+        p_sas_email: sasEmail
+      });
+      if (up.error) throw friendlyError(up.error, 'Could not register the existing term');
+      id = up.data;
+    }
     var { error } = await window.supabase.rpc('fn_update_semester', {
-      p_semester_id:   semesterId,
+      p_semester_id:   id,
       p_semester:      semesterName,
       p_academic_year: academicYear,
       p_sas_email:     sasEmail
     });
     if (error) throw friendlyError(error, 'Could not update the semester');
+  }
+
+  // ── OSAS Director: permanently remove a semester and its clearance rows ──
+  // The RPC (clearit_semester_delete.sql) is atomic and lifts the history
+  // guard for that transaction. The sequential fallback works only for terms
+  // the guard allows; any RLS/trigger error is surfaced verbatim to the UI.
+  async function deleteSemester (target, sasEmail) {
+    var rpc = await window.supabase.rpc('fn_delete_semester_cascade', {
+      p_semester_id:   target.id || null,
+      p_semester:      target.semester,
+      p_academic_year: target.academic_year,
+      p_sas_email:     sasEmail
+    });
+    if (!rpc.error) return rpc.data || {};
+    if (!isMissingFunction(rpc.error)) {
+      var raw = (rpc.error && rpc.error.message) ? rpc.error.message : String(rpc.error);
+      console.error('[CLEARIT] Semester DELETE failed:', rpc.error);
+      throw new Error(friendlyError(rpc.error, 'Could not delete the semester').message +
+        ' (Supabase: ' + raw + ')');
+    }
+
+    // Fallback for databases without the migration.
+    var del = await window.supabase
+      .from('clearance_records')
+      .delete()
+      .eq('semester', target.semester)
+      .eq('academic_year', target.academic_year)
+      .select('id');
+    if (del.error) {
+      var rawDel = (del.error && del.error.message) ? del.error.message : String(del.error);
+      throw new Error('Could not delete clearance records (Supabase: ' + rawDel + ')');
+    }
+    if (target.id) {
+      var sdel = await window.supabase
+        .from('semesters')
+        .delete()
+        .eq('id', target.id)
+        .select('id');
+      if (sdel.error) {
+        var rawSem = (sdel.error && sdel.error.message) ? sdel.error.message : String(sdel.error);
+        throw new Error('Could not delete the semester (Supabase: ' + rawSem + ')');
+      }
+      if (!sdel.data || !sdel.data.length) {
+        throw new Error('Semester delete did not affect any row. The record may be missing or blocked by Supabase RLS.');
+      }
+    }
+    return { deleted_records: del.data ? del.data.length : 0 };
   }
 
   // ── Mutations ──────────────────────────────────────────────────────────
@@ -1174,6 +1311,7 @@ var DB = (function () {
     hasOutstandingClearance: hasOutstandingClearance,
     getAllStudentClearance:  getAllStudentClearance,
     getSemesterOptions:      getSemesterOptions,
+    getAllSemesters:         getAllSemesters,
     getStudentsForSemester: getStudentsForSemester,
     updateActiveStudentsSemester: updateActiveStudentsSemester,
     getAllStudents:          getAllStudents,
@@ -1204,6 +1342,7 @@ var DB = (function () {
     getActiveSemester:      getActiveSemester,
     createSemester:         createSemester,
     activateSemester:       activateSemester,
-    updateSemester:         updateSemester
+    updateSemester:         updateSemester,
+    deleteSemester:         deleteSemester
   };
 })();

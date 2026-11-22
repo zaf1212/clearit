@@ -132,8 +132,10 @@
   var blocksAssignedSections = []; // [{ name, count, studentIds }] from Supabase
 
   // Semester Clearance Management (OSAS Director) state
-  var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active }]
+  var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active, clearance_count }]
   var semesterEditTarget = null; // semester entry being edited
+  var smEditWarningTarget  = null;
+  var smDeleteWarningTarget = null;
 
   // E-signature capture state.
   //   sigStrokes  - drawn strokes as {x, y, w} points in CSS pixels, so a resize
@@ -1963,9 +1965,22 @@
     return '2026-2027';
   }
 
+  function semesterKey (s) {
+    return s.academic_year + '|' + s.semester;
+  }
+
+  function findSemesterByKey (key) {
+    for (var i = 0; i < semesterMgmtList.length; i++) {
+      if (semesterKey(semesterMgmtList[i]) === key) return semesterMgmtList[i];
+    }
+    return null;
+  }
+
   async function loadSemesterMgmtList () {
     try {
-      semesterMgmtList = await DB.getSemesters();
+      // All registered semesters + every distinct (academic_year, semester)
+      // pair that exists in clearance_records — no hidden filters or limits.
+      semesterMgmtList = await DB.getAllSemesters();
     } catch (err) {
       console.error(err);
       toast('Failed to load semesters: ' + err.message, 'error');
@@ -1975,33 +1990,148 @@
   }
 
   function renderSemesterMgmtList () {
+    var semOrder = { '1st Semester': 0, '2nd Semester': 1, 'Summer / Midyear': 2 };
     var sorted = semesterMgmtList.slice().sort(function (a, b) {
-      if (!!a.is_active !== !!b.is_active) return a.is_active ? -1 : 1;
-      if (a.academic_year !== b.academic_year) return a.academic_year < b.academic_year ? 1 : -1;
-      if (a.semester !== b.semester) return a.semester < b.semester ? -1 : 1;
-      return 0;
+      var ayA = parseInt(String(a.academic_year).split('-')[0], 10) || 0;
+      var ayB = parseInt(String(b.academic_year).split('-')[0], 10) || 0;
+      if (ayA !== ayB) return ayA - ayB;
+      var oA = semOrder[a.semester] !== undefined ? semOrder[a.semester] : 3;
+      var oB = semOrder[b.semester] !== undefined ? semOrder[b.semester] : 3;
+      if (oA !== oB) return oA - oB;
+      return String(a.semester).localeCompare(String(b.semester));
     });
 
     var rows = '';
     sorted.forEach(function (s) {
+      var key    = escapeHtml(semesterKey(s));
+      var sem    = escapeHtml(s.semester);
+      var year   = escapeHtml(s.academic_year);
       var status = s.is_active
         ? '<span class="chip bg-emerald-100 text-emerald-700 ring-1 ring-inset ring-emerald-200">Active</span>'
-        : '<span class="chip bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200">Created</span>';
+        : s.registered
+          ? '<span class="chip bg-slate-100 text-slate-500 ring-1 ring-inset ring-slate-200">Created</span>'
+          : '<span class="chip bg-amber-50 text-amber-700 ring-1 ring-inset ring-amber-200" title="Found in clearance records, not yet registered">Records only</span>';
+
       var setActiveBtn = s.is_active
         ? '<button disabled class="rounded-lg px-3 py-1.5 text-xs font-bold mr-2 bg-emerald-50 text-emerald-400 cursor-not-allowed">Active</button>'
-        : '<button data-sm-activate="' + s.id + '" class="rounded-lg px-3 py-1.5 text-xs font-bold mr-2 bg-navy-700 text-white shadow-sm shadow-navy-700/20 hover:bg-navy-800 transition">Set Active</button>';
+        : s.registered
+          ? '<button data-sm-activate="' + escapeHtml(s.id) + '" class="rounded-lg px-3 py-1.5 text-xs font-bold mr-2 bg-navy-700 text-white shadow-sm shadow-navy-700/20 hover:bg-navy-800 transition">Set Active</button>'
+          : '<button disabled title="Register this term before activating" class="rounded-lg px-3 py-1.5 text-xs font-bold mr-2 bg-slate-100 text-slate-400 cursor-not-allowed">Set Active</button>';
+
+      var deleteBtn = s.is_active
+        ? '<button disabled title="Cannot delete the currently Active semester" aria-label="Cannot delete the currently Active semester" class="sm-delete-btn ml-2">' +
+            '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+            '<span>Delete</span></button>'
+        : '<button data-sm-delete-key="' + key + '" title="Delete ' + sem + ' (' + year + ')" aria-label="Delete ' + sem + ' (' + year + ')" class="sm-delete-btn ml-2">' +
+            '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+            '<span>Delete</span></button>';
+
       rows +=
         '<tr class="hover:bg-slate-50 transition">' +
-        '<td class="py-3 font-mono text-xs text-slate-600">' + s.academic_year + '</td>' +
-        '<td class="py-3 font-semibold text-slate-700">' + s.semester + '</td>' +
+        '<td class="py-3 font-mono text-xs text-slate-600">' + year + '</td>' +
+        '<td class="py-3"><span class="font-semibold text-slate-700">' + sem + '</span>' +
+          '<span class="ml-2 text-[10px] text-slate-400">' + (s.clearance_count || 0) + ' record(s)</span></td>' +
         '<td class="py-3">' + status + '</td>' +
         '<td class="py-3 text-right whitespace-nowrap">' + setActiveBtn +
-        '<button data-sm-edit="' + s.id + '" class="rounded-lg px-3 py-1.5 text-xs font-bold bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition">Edit</button>' +
+          '<button data-sm-edit-key="' + key + '" class="rounded-lg px-3 py-1.5 text-xs font-bold bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition">Edit</button>' +
+          deleteBtn +
         '</td>' +
         '</tr>';
     });
     $('#sm-semester-list').innerHTML = rows;
     $('#sm-empty').classList.toggle('hidden', sorted.length > 0);
+  }
+
+  /* ===================== Semester edit / delete warnings ===================== */
+
+  function openSmEditWarning (target) {
+    if (!isSASDirector() || !target) return;
+    smEditWarningTarget = target;
+    $('#sm-edit-warning-message').textContent =
+      'Warning: Editing ' + target.semester + ' (' + target.academic_year +
+      ') will update this term across existing student clearance records. Are you sure you want to proceed?';
+    $('#sm-edit-warning-modal').classList.remove('hidden');
+    requestAnimationFrame(function () { $('#sm-edit-warning-confirm').focus(); });
+  }
+
+  function closeSmEditWarning () {
+    $('#sm-edit-warning-modal').classList.add('hidden');
+    smEditWarningTarget = null;
+  }
+
+  function confirmSmEditWarning () {
+    if (!smEditWarningTarget) return;
+    var key = semesterKey(smEditWarningTarget);
+    closeSmEditWarning();
+    openSemesterEdit(key);
+  }
+
+  function openSmDeleteWarning (target) {
+    if (!isSASDirector() || !target) return;
+    if (target.is_active) {
+      toast('Cannot delete the currently Active semester', 'error');
+      return;
+    }
+    smDeleteWarningTarget = target;
+    $('#sm-delete-warning-message').textContent =
+      'Danger: Are you sure you want to permanently delete ' + target.semester +
+      ' (' + target.academic_year + ') and all ' + (target.clearance_count || 0) +
+      ' associated student clearance records? This cannot be undone.';
+    $('#sm-delete-warning-error').classList.add('hidden');
+    $('#sm-delete-warning-error').textContent = '';
+    $('#sm-delete-warning-modal').classList.remove('hidden');
+    requestAnimationFrame(function () { $('#sm-delete-warning-confirm').focus(); });
+  }
+
+  function closeSmDeleteWarning () {
+    $('#sm-delete-warning-modal').classList.add('hidden');
+    smDeleteWarningTarget = null;
+  }
+
+  async function confirmSmDelete () {
+    if (!smDeleteWarningTarget) return;
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+
+    var target   = smDeleteWarningTarget;
+    var btn      = $('#sm-delete-warning-confirm');
+    var errorBox = $('#sm-delete-warning-error');
+    errorBox.classList.add('hidden');
+    errorBox.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Deleting\u2026';
+
+    try {
+      await DB.deleteSemester(target, currentUser.email);
+
+      // Refresh the table and every term dropdown immediately.
+      await loadSemesterMgmtList();
+      await refreshSemesterOptions();
+      fillAllSemesterSelects();
+      if (target.semester === currentSemester && target.academic_year === currentAY) {
+        var next = null;
+        for (var i = 0; i < semesterMgmtList.length; i++) {
+          if (semesterMgmtList[i].is_active) { next = semesterMgmtList[i]; break; }
+        }
+        if (!next && semesterMgmtList.length) next = semesterMgmtList[0];
+        if (next) setSemesterSelection(next.semester, next.academic_year);
+      } else {
+        setSemesterSelection(currentSemester, currentAY);
+      }
+      if (currentUser.type === 'signatory') await refreshSignatoryData();
+      else await refreshStudentData();
+
+      closeSmDeleteWarning();
+      toast('Deleted ' + target.semester + ' (' + target.academic_year + ').', 'success');
+    } catch (err) {
+      console.error('[CLEARIT] Could not delete semester:', err);
+      var detail = (err && err.message) ? err.message : String(err);
+      errorBox.textContent = 'Delete failed: ' + detail;
+      errorBox.classList.remove('hidden');
+      toast('Delete failed: ' + detail, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Delete Semester';
+    }
   }
 
   /* ================= Initialize New Semester — 3-step wizard ================= */
@@ -2491,13 +2621,10 @@
     });
   }
 
-  function openSemesterEdit (semesterId) {
+  function openSemesterEdit (semesterKey) {
     if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
 
-    var target = null;
-    for (var i = 0; i < semesterMgmtList.length; i++) {
-      if (semesterMgmtList[i].id === semesterId) { target = semesterMgmtList[i]; break; }
-    }
+    var target = findSemesterByKey(semesterKey);
     if (!target) { toast('Semester not found.', 'error'); return; }
 
     semesterEditTarget = target;
@@ -2532,7 +2659,10 @@
     $('#sm-edit-error').classList.add('hidden');
 
     try {
-      await DB.updateSemester(semesterEditTarget.id, sem, ay, currentUser.email);
+      await DB.updateSemester(
+        semesterEditTarget.id, sem, ay, currentUser.email,
+        semesterEditTarget.semester, semesterEditTarget.academic_year
+      );
       if (semesterEditTarget.is_active) {
         currentSemester = sem;
         currentAY        = ay;
@@ -4657,14 +4787,28 @@
     });
 
     $('#sm-semester-list').addEventListener('click', async function (e) {
-      var btn = e.target.closest('button[data-sm-activate], button[data-sm-edit]');
+      var btn = e.target.closest('button[data-sm-activate], button[data-sm-edit-key], button[data-sm-delete-key]');
       if (!btn || !isSASDirector()) return;
       if (btn.hasAttribute('data-sm-activate')) {
         await setActiveSemester(btn.getAttribute('data-sm-activate'));
+      } else if (btn.hasAttribute('data-sm-delete-key')) {
+        var delTarget = findSemesterByKey(btn.getAttribute('data-sm-delete-key'));
+        if (delTarget) openSmDeleteWarning(delTarget);
       } else {
-        openSemesterEdit(btn.getAttribute('data-sm-edit'));
+        var editTarget = findSemesterByKey(btn.getAttribute('data-sm-edit-key'));
+        if (editTarget) openSmEditWarning(editTarget);
       }
     });
+
+    $('#sm-edit-warning-cancel').addEventListener('click', closeSmEditWarning);
+    $('#sm-edit-warning-close').addEventListener('click', closeSmEditWarning);
+    $('#sm-edit-warning-backdrop').addEventListener('click', closeSmEditWarning);
+    $('#sm-edit-warning-confirm').addEventListener('click', confirmSmEditWarning);
+
+    $('#sm-delete-warning-cancel').addEventListener('click', closeSmDeleteWarning);
+    $('#sm-delete-warning-close').addEventListener('click', closeSmDeleteWarning);
+    $('#sm-delete-warning-backdrop').addEventListener('click', closeSmDeleteWarning);
+    $('#sm-delete-warning-confirm').addEventListener('click', confirmSmDelete);
 
     $('#sm-edit-cancel').addEventListener('click', closeSemesterEdit);
     $('#sm-edit-back-btn').addEventListener('click', closeSemesterEdit);
@@ -4672,7 +4816,9 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
-        if (!$('#remove-section-modal').classList.contains('hidden')) closeRemoveSectionModal();
+        if (!$('#sm-edit-warning-modal').classList.contains('hidden')) closeSmEditWarning();
+        else if (!$('#sm-delete-warning-modal').classList.contains('hidden')) closeSmDeleteWarning();
+        else if (!$('#remove-section-modal').classList.contains('hidden')) closeRemoveSectionModal();
         else if (!$('#delete-student-modal').classList.contains('hidden')) closeDeleteStudentModal();
         else if (!$('#remark-modal').classList.contains('hidden')) closeRemarkModal();
         else if (!$('#semester-mgmt-modal').classList.contains('hidden')) {

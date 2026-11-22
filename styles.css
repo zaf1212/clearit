@@ -215,6 +215,56 @@ body {
   z-index: 60;
 }
 
+/* Semester Management — destructive row action */
+.sm-delete-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  border: 1px solid #fecaca;
+  border-radius: 0.5rem;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.sm-delete-btn:hover:not(:disabled) {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.sm-delete-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.25);
+}
+
+.sm-delete-btn:disabled {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  color: #cbd5e1;
+  cursor: not-allowed;
+}
+
+.sm-warning-modal {
+  z-index: 70;
+}
+
+.dark-theme .sm-delete-btn {
+  background: rgba(127, 29, 29, 0.35);
+  border-color: #7f1d1d;
+  color: #fca5a5;
+}
+
+.dark-theme .sm-delete-btn:hover:not(:disabled) {
+  background: rgba(153, 27, 27, 0.55);
+  color: #fecaca;
+}
+
 .dark-theme .admin-delete-btn {
   background: rgba(127, 29, 29, 0.35);
   border-color: #7f1d1d;
