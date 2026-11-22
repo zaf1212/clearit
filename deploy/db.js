@@ -700,6 +700,91 @@ var DB = (function () {
     return updates.length;
   }
 
+  // ── OSAS Director: distinct section/block values assigned in the DB ────
+  // The Blocks & Sections manager must show sections that exist only because
+  // they are attached to a student (e.g. "Hope" or "talisay2"), not just the
+  // locally saved quick-pick suggestions. Each entry carries the exact student
+  // IDs so removing the section can clear those assignments in Supabase.
+  async function getAssignedSections () {
+    var attempts = [
+      'id, section_block, year_block',
+      'id, section_block',
+      'id, year_block'
+    ];
+    var rows = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await window.supabase.from('students').select(attempts[i]);
+      if (!r.error) { rows = r.data || []; break; }
+      lastErr = r.error;
+    }
+    if (!rows) throw friendlyError(lastErr, 'Could not load assigned sections');
+
+    var seen = {}, out = [];
+    rows.forEach(function (s) {
+      var parts = splitYearBlock(s.year_block);
+      var name = String(s.section_block || parts.sectionBlock || '').trim();
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (!seen[key]) {
+        seen[key] = { name: name, count: 0, studentIds: [] };
+        out.push(seen[key]);
+      }
+      seen[key].count++;
+      if (s.id && seen[key].studentIds.indexOf(s.id) === -1) seen[key].studentIds.push(s.id);
+    });
+    return out;
+  }
+
+  // ── OSAS Director: clear a section from assigned students ──────────────
+  // section_block is emptied and the section portion of the legacy year_block
+  // is removed (the year level is preserved), so the section cannot reappear
+  // on the next load. Every UPDATE is verified with .select() because RLS can
+  // silently return an empty result instead of an error.
+  async function clearStudentSectionAssignments (studentIds) {
+    if (!studentIds || !studentIds.length) return 0;
+
+    var read = await window.supabase
+      .from('students')
+      .select('id, year_level, section_block, year_block')
+      .in('id', studentIds);
+    if (read.error) {
+      var rawRead = (read.error && read.error.message) ? read.error.message : String(read.error);
+      console.error('[CLEARIT] Section clear read failed:', read.error);
+      throw new Error('Could not load assigned students (Supabase: ' + rawRead + ')');
+    }
+    var rows = read.data || [];
+    if (!rows.length) {
+      throw new Error('No assigned student records were found. The section may already be cleared.');
+    }
+
+    var results = await Promise.all(rows.map(function (row) {
+      var parts = splitYearBlock(row.year_block);
+      var year = String(row.year_level || parts.yearLevel || '').trim();
+      return window.supabase
+        .from('students')
+        .update({ section_block: '', year_block: year })
+        .eq('id', row.id)
+        .select('id, section_block, year_block');
+    }));
+
+    var failed = null;
+    for (var i = 0; i < results.length; i++) {
+      if (results[i].error) { failed = results[i].error; break; }
+    }
+    if (failed) {
+      var raw = (failed && failed.message) ? failed.message : String(failed);
+      console.error('[CLEARIT] Section clear UPDATE failed:', failed);
+      throw new Error(friendlyError(failed, 'Could not clear the section').message +
+        ' (Supabase: ' + raw + ')');
+    }
+    var empty = results.filter(function (r) { return !r.data || !r.data.length; });
+    if (empty.length) {
+      throw new Error('Section clear did not affect ' + empty.length +
+        ' student record(s). They may be missing or blocked by Supabase RLS.');
+    }
+    return rows.length;
+  }
+
   // ── Admin: register a new student + initialize clearance records ──────
   async function createStudent (studentFields) {
     var { data: student, error: err1 } = await window.supabase
@@ -1095,6 +1180,8 @@ var DB = (function () {
     updateStudent:          updateStudent,
     deleteStudent:          deleteStudent,
     assignStudentsYearSection: assignStudentsYearSection,
+    getAssignedSections:    getAssignedSections,
+    clearStudentSectionAssignments: clearStudentSectionAssignments,
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,
     changeSignatoryPassword: changeSignatoryPassword,

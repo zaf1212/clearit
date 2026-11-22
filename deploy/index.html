@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261122e" />
+  <link rel="stylesheet" href="styles.css?v=20261122f" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261122e"></script>
+  <script src="supabaseConfig.js?v=20261122f"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261122e"></script>
-  <script src="db.js?v=20261122e"></script>
+  <script src="supabaseClient.js?v=20261122f"></script>
+  <script src="db.js?v=20261122f"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -1077,8 +1077,8 @@
               <div>
                 <h4 class="font-bold text-slate-800">Create / Remove Sections &amp; Blocks</h4>
                 <p class="text-[11px] text-slate-500 leading-relaxed">
-                  Add a quick-pick suggestion, or click the trash icon on any section above to remove it from the list.
-                  This only changes suggestions — students already assigned to a removed section are not affected.
+                  Shows every saved section plus each distinct Section / Block already assigned to a student (with a student count).
+                  Click the trash icon on any badge to remove it; assigned students will be unassigned after confirmation.
                 </p>
               </div>
             </div>
@@ -1429,6 +1429,38 @@
   </div>
 
 
+  <!-- ==================== REMOVE SECTION CONFIRMATION ==================== -->
+  <div id="remove-section-modal" class="hidden fixed inset-0 remove-section-modal">
+    <div id="remove-section-backdrop" class="absolute inset-0 bg-navy-900/60 backdrop-blur-sm"></div>
+    <div class="relative min-h-full flex items-center justify-center p-4">
+      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+        <div class="flex items-start justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800">Remove Section / Block</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Confirm removal</p>
+            </div>
+          </div>
+          <button id="remove-section-close" type="button" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <p id="remove-section-message" class="text-sm leading-relaxed text-slate-700"></p>
+        <div id="remove-section-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 break-words"></div>
+
+        <div class="flex gap-3 mt-6">
+          <button id="remove-section-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+          <button id="remove-section-confirm" type="button" class="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:bg-red-700 transition">Remove Section</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
   <!-- ==================== DIGITAL SIGNATURE MODAL ==================== -->
   <div id="signature-modal" class="hidden fixed inset-0 z-50">
     <div id="signature-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
@@ -1518,6 +1550,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261122e"></script>
+  <script src="app.js?v=20261122f"></script>
 </body>
 </html>

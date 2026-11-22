@@ -128,6 +128,8 @@
   var adminStudentList     = [];  // all students for admin panel
   var adminEditTarget      = null; // student UUID being edited
   var deleteStudentTarget  = null; // student being confirmed for removal
+  var removeSectionTarget  = null; // section being confirmed for removal
+  var blocksAssignedSections = []; // [{ name, count, studentIds }] from Supabase
 
   // Semester Clearance Management (OSAS Director) state
   var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active }]
@@ -880,6 +882,10 @@
 
         // RBAC: only the OSAS Director gets Manage Blocks & Sections
         $('#sa-blocks-mgmt').classList.toggle('hidden', !isSAS);
+
+        // Preload DB-assigned sections so every Section/Block datalist already
+        // knows about values like "Hope" or "talisay2" before the modal opens.
+        if (isSAS) loadAssignedSections();
 
         // Every signatory needs a signature, so this button is not role-gated.
         // Its label carries a tick once one is saved.
@@ -3741,6 +3747,7 @@
     blocksSelected = {};
     renderBlocksSectionsList();
     rebuildSectionDatalist();
+    loadAssignedSections();
     loadBlocksStudents();
   }
 
@@ -3865,35 +3872,74 @@
     catch (e) { /* storage unavailable: suggestions stay session-only */ }
   }
 
+  // Saved suggestions + every distinct section currently assigned in Supabase.
+  // Case-insensitive dedupe; the first saved spelling wins for display.
+  function getAllBlockSections () {
+    var map = {}, order = [];
+    function add (name, count, studentIds) {
+      name = String(name || '').trim();
+      if (!name) return;
+      var key = name.toLowerCase();
+      if (!Object.prototype.hasOwnProperty.call(map, key)) {
+        map[key] = { name: name, count: 0, studentIds: [] };
+        order.push(key);
+      }
+      if (count && count > map[key].count) map[key].count = count;
+      (studentIds || []).forEach(function (id) {
+        if (id && map[key].studentIds.indexOf(id) === -1) map[key].studentIds.push(id);
+      });
+    }
+    getBlocksSections().forEach(function (s) { add(s, 0, []); });
+    blocksAssignedSections.forEach(function (s) { add(s.name, s.count, s.studentIds); });
+    return order.map(function (key) {
+      var item = map[key];
+      item.isDefault = isDefaultBlockSection(item.name);
+      return item;
+    });
+  }
+
+  async function loadAssignedSections () {
+    try {
+      blocksAssignedSections = await DB.getAssignedSections();
+    } catch (err) {
+      // Keep the last known values rather than silently reporting zero students.
+      console.error('[CLEARIT] Could not load assigned sections:', err);
+      toast('Could not refresh assigned sections: ' + (err && err.message ? err.message : String(err)), 'error');
+      return;
+    }
+    renderBlocksSectionsList();
+    rebuildSectionDatalist();
+  }
+
   function rebuildSectionDatalist () {
     var dl = $('#section-options');
     if (!dl) return;
     dl.innerHTML = '';
-    getBlocksSections().forEach(function (s) {
+    getAllBlockSections().forEach(function (s) {
       var o = document.createElement('option');
-      o.value = s;
+      o.value = s.name;
       dl.appendChild(o);
     });
   }
 
   function renderBlocksSectionsList () {
     var wrap = $('#blocks-sections-list');
-    var sections = getBlocksSections();
+    var sections = getAllBlockSections();
     if (!sections.length) {
       wrap.innerHTML = '<p class="text-xs text-slate-400 italic">No sections yet &mdash; add one above.</p>';
       return;
     }
     wrap.innerHTML = sections.map(function (s) {
-      var def = isDefaultBlockSection(s);
-      var safe = escapeHtml(s);
+      var safe = escapeHtml(s.name);
       return '<button type="button" data-blocks-remove-section="' + safe + '" ' +
           'title="Remove section ' + safe + '" aria-label="Remove section ' + safe + '" ' +
           'class="group inline-flex items-center gap-1.5 rounded-full pl-3 pr-1.5 py-1 text-xs font-semibold ring-1 ring-inset transition ' +
-          (def
+          (s.isDefault
             ? 'bg-slate-100 text-slate-700 ring-slate-200 hover:bg-red-50 hover:text-red-700 hover:ring-red-200'
             : 'bg-navy-50 text-navy-700 ring-navy-100 hover:bg-red-50 hover:text-red-700 hover:ring-red-200') + '">' +
           safe +
-          (def ? '<span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">default</span>' : '') +
+          '<span class="section-count' + (s.count ? ' section-count-active' : '') + '" title="' + s.count + ' student(s) assigned">(' + s.count + ')</span>' +
+          (s.isDefault ? '<span class="text-[10px] font-medium uppercase tracking-wide text-slate-400">default</span>' : '') +
           '<svg class="w-3 h-3 text-slate-400 group-hover:text-red-600" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
         '</button>';
     }).join('');
@@ -3904,7 +3950,7 @@
     var input = $('#blocks-new-section');
     var name = input.value.trim();
     if (!name) { toast('Type a section or block name first.', 'error'); return; }
-    var existing = getBlocksSections().map(function (s) { return s.toLowerCase(); });
+    var existing = getAllBlockSections().map(function (s) { return s.name.toLowerCase(); });
     if (existing.indexOf(name.toLowerCase()) !== -1) { toast('That section already exists.', 'error'); return; }
     var sections = getBlocksSections();
     unremoveBlockSection(name); // re-adding a previously removed default must restore it
@@ -3918,20 +3964,116 @@
     input.focus();
   }
 
+  /* ===================== OSAS Director: Remove Section ===================== */
+
+  function openRemoveSectionModal (section) {
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+    if (!section) return;
+    removeSectionTarget = section;
+
+    var name  = section.name;
+    var count = section.count || 0;
+    $('#remove-section-message').textContent = count > 0
+      ? 'Warning: ' + count + ' student(s) are currently assigned to section ' + name +
+        '. Removing this section will unassign/clear their section field (or ask if they want to proceed). ' +
+        'Are you sure you want to remove ' + name + '?'
+      : 'Are you sure you want to remove section ' + name + '?';
+    $('#remove-section-error').classList.add('hidden');
+    $('#remove-section-error').textContent = '';
+    $('#remove-section-modal').classList.remove('hidden');
+    requestAnimationFrame(function () { $('#remove-section-confirm').focus(); });
+  }
+
+  function closeRemoveSectionModal () {
+    $('#remove-section-modal').classList.add('hidden');
+    removeSectionTarget = null;
+  }
+
+  function setRemoveSectionLoading (btn, loading) {
+    if (loading) {
+      btn.dataset.removeOrigHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="animate-spin w-4 h-4 inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Removing\u2026';
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.removeOrigHtml || 'Remove Section';
+      delete btn.dataset.removeOrigHtml;
+    }
+  }
+
+  async function confirmRemoveSection () {
+    if (!removeSectionTarget) return;
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+
+    var target   = removeSectionTarget;
+    var key      = target.name.toLowerCase();
+    var btn      = $('#remove-section-confirm');
+    var errorBox = $('#remove-section-error');
+    errorBox.classList.add('hidden');
+    errorBox.textContent = '';
+    setRemoveSectionLoading(btn, true);
+
+    try {
+      // First clear the assignment in Supabase so the section cannot reappear
+      // as an "existing" section on the next load.
+      if (target.studentIds && target.studentIds.length) {
+        await DB.clearStudentSectionAssignments(target.studentIds);
+      }
+
+      // Then remove the suggestion locally (also hides built-in defaults).
+      saveBlocksSections(getBlocksSections().filter(function (s) {
+        return s.toLowerCase() !== key;
+      }));
+      var removed = getRemovedBlockSections();
+      if (!removed.some(function (r) { return r.toLowerCase() === key; })) removed.push(target.name);
+      saveRemovedBlockSections(removed);
+
+      blocksAssignedSections = blocksAssignedSections.filter(function (s) {
+        return s.name.toLowerCase() !== key;
+      });
+      if ($('#blocks-assign-section').value.toLowerCase() === key) $('#blocks-assign-section').value = '';
+
+      // Refresh the student tables/dashboards in memory — no page reload.
+      var fresh = await DB.getAllStudents();
+      var assignedIds = target.studentIds || [];
+      blocksStudents  = fresh;
+      adminStudentList = fresh.map(function (s) { return Object.assign({}, s); });
+      semesterStudents.forEach(function (s) {
+        if (assignedIds.indexOf(s.student_id) !== -1) {
+          s.sectionBlock = '';
+          s.section_block = '';
+          s.year_block = s.yearLevel || '';
+        }
+      });
+      allStudentRows = buildSemesterStudents();
+      renderBlocksList();
+      renderAdminList();
+      if (currentUser && currentUser.type === 'signatory') renderSignatory();
+
+      renderBlocksSectionsList();
+      rebuildSectionDatalist();
+      closeRemoveSectionModal();
+      toast('Removed section "' + target.name + '".', 'success');
+    } catch (err) {
+      console.error('[CLEARIT] Could not remove section:', err);
+      var detail = (err && err.message) ? err.message : String(err);
+      errorBox.textContent = 'Remove failed: ' + detail;
+      errorBox.classList.remove('hidden');
+      toast('Remove failed: ' + detail, 'error');
+    } finally {
+      setRemoveSectionLoading(btn, false);
+    }
+  }
+
   function handleBlocksSectionsClick (ev) {
     var btn = ev.target.closest('[data-blocks-remove-section]');
     if (!btn || !isSASDirector()) return;
     var name = btn.getAttribute('data-blocks-remove-section');
-    var key = name.toLowerCase();
-    var sections = getBlocksSections().filter(function (s) { return s.toLowerCase() !== key; });
-    var removed = getRemovedBlockSections();
-    if (!removed.some(function (r) { return r.toLowerCase() === key; })) removed.push(name);
-    saveRemovedBlockSections(removed);
-    saveBlocksSections(sections);
-    if ($('#blocks-assign-section').value.toLowerCase() === key) $('#blocks-assign-section').value = '';
-    renderBlocksSectionsList();
-    rebuildSectionDatalist();
-    toast('Removed "' + name + '" from the section list.', 'success');
+    var found = null;
+    getAllBlockSections().forEach(function (s) {
+      if (s.name.toLowerCase() === name.toLowerCase()) found = s;
+    });
+    if (found) openRemoveSectionModal(found);
   }
 
   /* ===================== Events ===================== */
@@ -4408,6 +4550,10 @@
       if (ev.key === 'Enter') { ev.preventDefault(); addBlocksSection(); }
     });
     $('#blocks-sections-list').addEventListener('click', handleBlocksSectionsClick);
+    $('#remove-section-cancel').addEventListener('click', closeRemoveSectionModal);
+    $('#remove-section-close').addEventListener('click', closeRemoveSectionModal);
+    $('#remove-section-backdrop').addEventListener('click', closeRemoveSectionModal);
+    $('#remove-section-confirm').addEventListener('click', confirmRemoveSection);
 
     // Admin student management modal
     $('#sa-manage-students').addEventListener('click', openAdminModal);
@@ -4526,7 +4672,8 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
-        if (!$('#delete-student-modal').classList.contains('hidden')) closeDeleteStudentModal();
+        if (!$('#remove-section-modal').classList.contains('hidden')) closeRemoveSectionModal();
+        else if (!$('#delete-student-modal').classList.contains('hidden')) closeDeleteStudentModal();
         else if (!$('#remark-modal').classList.contains('hidden')) closeRemarkModal();
         else if (!$('#semester-mgmt-modal').classList.contains('hidden')) {
           if (!$('#sm-edit-panel').classList.contains('hidden')) closeSemesterEdit();
