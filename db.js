@@ -1006,6 +1006,79 @@ var DB = (function () {
     return pc.data ? pc.data.id : null;
   }
 
+  // ── Admin: permanently delete a student and all child records ───────────
+  // Student login is custom-table based (students.password_hash), so there is
+  // no auth.users account to remove here.
+  //
+  // Preferred path is the atomic RPC from clearit_delete_student.sql. It also
+  // lifts the clearance-history trigger only for that transaction, which is
+  // required to remove historical clearance records. The sequential path below
+  // is a fallback for databases where that migration has not been installed.
+  var deleteRpcAvailable = null; // null = not probed yet this page load
+
+  function deleteErrorMessage (err) {
+    return (err && err.message) ? err.message : String(err || 'Unknown error');
+  }
+
+  function deleteFailure (context, err) {
+    var raw = deleteErrorMessage(err);
+    console.error('[CLEARIT] ' + context + ':', err);
+    return new Error(context + ' (Supabase: ' + raw + ')');
+  }
+
+  function isMissingFunction (err) {
+    var raw = deleteErrorMessage(err);
+    return err && (
+      err.code === 'PGRST202' ||
+      err.code === '42883' ||
+      /Could not find the function|function .* does not exist/i.test(raw)
+    );
+  }
+
+  async function deleteChildStudentRows (studentUUID) {
+    // Current schema child table. Legacy tables (clearance_items / clearances)
+    // are handled by the RPC migration's dynamic SQL, which avoids 404 probes
+    // on databases where those tables do not exist.
+    var r = await window.supabase
+      .from('clearance_records')
+      .delete()
+      .eq('student_id', studentUUID)
+      .select('student_id');
+    if (r.error) throw deleteFailure('Could not remove related clearance_records', r.error);
+  }
+
+  async function deleteStudent (studentUUID) {
+    if (deleteRpcAvailable !== false) {
+      var rpc = await window.supabase.rpc('delete_student_cascade', {
+        p_student_id: studentUUID
+      });
+      if (!rpc.error) {
+        deleteRpcAvailable = true;
+        return rpc.data || { id: studentUUID };
+      }
+      if (!isMissingFunction(rpc.error)) {
+        throw deleteFailure('Could not remove the student', rpc.error);
+      }
+      // Migration not installed. Remember that for the rest of this page load
+      // so later deletions do not repeat the 404 probe.
+      deleteRpcAvailable = false;
+    }
+
+    // Fallback for databases without the RPC migration.
+    await deleteChildStudentRows(studentUUID);
+
+    var del = await window.supabase
+      .from('students')
+      .delete()
+      .eq('id', studentUUID)
+      .select('id, institutional_id, full_name');
+    if (del.error) throw deleteFailure('Could not remove the student', del.error);
+    if (!del.data || !del.data.length) {
+      throw new Error('Student delete did not affect any row. The record may be missing or blocked by Supabase RLS.');
+    }
+    return del.data[0];
+  }
+
   // ── Public API ─────────────────────────────────────────────────────────
   return {
     getCategories:          getCategories,
@@ -1020,6 +1093,7 @@ var DB = (function () {
     updateActiveStudentsSemester: updateActiveStudentsSemester,
     getAllStudents:          getAllStudents,
     updateStudent:          updateStudent,
+    deleteStudent:          deleteStudent,
     assignStudentsYearSection: assignStudentsYearSection,
     createStudent:          createStudent,
     changeStudentPassword:  changeStudentPassword,

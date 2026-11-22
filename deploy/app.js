@@ -127,6 +127,7 @@
   var allStudentRows       = [];
   var adminStudentList     = [];  // all students for admin panel
   var adminEditTarget      = null; // student UUID being edited
+  var deleteStudentTarget  = null; // student being confirmed for removal
 
   // Semester Clearance Management (OSAS Director) state
   var semesterMgmtList   = [];   // [{ id, semester, academic_year, is_active }]
@@ -1455,6 +1456,8 @@
     var rows = '';
     filtered.forEach(function (s) {
       var st = ACADEMIC_STATUSES.indexOf(s.academicStatus) === -1 ? 'Active' : s.academicStatus;
+      var safeName = escapeHtml(s.full_name);
+      var safeId   = escapeHtml(s.institutional_id);
       rows +=
         '<tr class="hover:bg-slate-50 transition' + (st === 'Active' ? '' : ' bg-slate-50/60') + '">' +
         '<td class="py-3 font-mono text-xs text-slate-600">' + s.institutional_id +
@@ -1467,8 +1470,12 @@
           'class="w-32 rounded-lg border border-slate-300 bg-slate-50 px-2 py-1 text-xs focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" /></td>' +
         '<td class="py-3">' + statusToggle(s) + '</td>' +
         '<td class="py-3 text-center">' + pwChip(s) + '</td>' +
-        '<td class="py-3 text-right">' +
-          '<button data-admin-edit="' + s.id + '" class="rounded-lg px-3 py-1.5 text-xs font-bold bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition">Edit</button>' +
+        '<td class="py-3 text-right whitespace-nowrap">' +
+          '<button data-admin-edit="' + s.id + '" class="rounded-lg px-3 py-1.5 text-xs font-bold bg-navy-50 text-navy-700 border border-navy-200 hover:bg-navy-100 transition mr-2">Edit</button>' +
+          '<button data-admin-delete="' + s.id + '" aria-label="Delete ' + safeName + '" title="Delete ' + safeName + '" class="admin-delete-btn">' +
+            '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>' +
+            '<span>Delete</span>' +
+          '</button>' +
         '</td>' +
         '</tr>';
     });
@@ -1607,6 +1614,83 @@
     $('#admin-list-panel').classList.remove('hidden');
     $('#admin-edit-panel').classList.add('hidden');
     adminEditTarget = null;
+  }
+
+  /* ===================== OSAS Director: Remove Student ===================== */
+
+  function openDeleteStudentModal (student) {
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+    if (!student) return;
+
+    deleteStudentTarget = student;
+    $('#delete-student-message').textContent =
+      'Are you sure you want to permanently remove ' + student.full_name +
+      ' (' + student.institutional_id + ') and all their clearance records? This cannot be undone.';
+    $('#delete-student-error').classList.add('hidden');
+    $('#delete-student-error').textContent = '';
+    $('#delete-student-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    requestAnimationFrame(function () { $('#delete-student-confirm').focus(); });
+  }
+
+  function closeDeleteStudentModal () {
+    $('#delete-student-modal').classList.add('hidden');
+    deleteStudentTarget = null;
+    if ($('#admin-modal').classList.contains('hidden')) document.body.style.overflow = '';
+  }
+
+  function setDeleteButtonLoading (btn, loading) {
+    if (loading) {
+      btn.dataset.deleteOrigHtml = btn.innerHTML;
+      btn.disabled = true;
+      btn.innerHTML = '<svg class="animate-spin w-4 h-4 inline mr-1" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg> Deleting\u2026';
+    } else {
+      btn.disabled = false;
+      btn.innerHTML = btn.dataset.deleteOrigHtml || 'Delete Student';
+      delete btn.dataset.deleteOrigHtml;
+    }
+  }
+
+  function purgeDeletedStudentFromCaches (studentUUID) {
+    adminStudentList = adminStudentList.filter(function (s) { return s.id !== studentUUID; });
+    semesterStudents = semesterStudents.filter(function (s) { return s.student_id !== studentUUID; });
+    allClearanceRows = allClearanceRows.filter(function (r) { return r.student_id !== studentUUID; });
+    studentClearanceRows = studentClearanceRows.filter(function (r) { return r.student_id !== studentUUID; });
+    delete blockedStudents[studentUUID];
+    allStudentRows = buildSemesterStudents();
+  }
+
+  async function confirmDeleteStudent () {
+    if (!deleteStudentTarget) return;
+    if (!isSASDirector()) { toast('Access denied.', 'error'); return; }
+
+    var student   = deleteStudentTarget;
+    var confirmBtn = $('#delete-student-confirm');
+    var errorBox  = $('#delete-student-error');
+    errorBox.classList.add('hidden');
+    errorBox.textContent = '';
+    setDeleteButtonLoading(confirmBtn, true);
+
+    try {
+      await DB.deleteStudent(student.id);
+
+      // Drop the row and every dependent dashboard datum without a reload.
+      purgeDeletedStudentFromCaches(student.id);
+      renderAdminList();
+      if (currentUser && currentUser.type === 'signatory') renderSignatory();
+
+      closeDeleteStudentModal();
+      toast('Student removed successfully.', 'success');
+    } catch (err) {
+      console.error('[CLEARIT] Could not delete student:', err);
+      var detail = (err && err.message) ? err.message : String(err);
+      // Includes the raw Supabase message (RLS, FK or trigger rejection).
+      errorBox.textContent = 'Delete failed: ' + detail;
+      errorBox.classList.remove('hidden');
+      toast('Delete failed: ' + detail, 'error');
+    } finally {
+      setDeleteButtonLoading(confirmBtn, false);
+    }
   }
 
   // OSAS Director override: reset a student's password change counter to 0.
@@ -4285,6 +4369,10 @@
     $('#admin-backdrop').addEventListener('click', closeAdminModal);
     $('#admin-back-btn').addEventListener('click', closeAdminEdit);
     $('#admin-edit-cancel').addEventListener('click', closeAdminEdit);
+    $('#delete-student-cancel').addEventListener('click', closeDeleteStudentModal);
+    $('#delete-student-close').addEventListener('click', closeDeleteStudentModal);
+    $('#delete-student-backdrop').addEventListener('click', closeDeleteStudentModal);
+    $('#delete-student-confirm').addEventListener('click', confirmDeleteStudent);
 
     var adminSearchTimer = null;
     $('#admin-search').addEventListener('input', function () {
@@ -4293,6 +4381,12 @@
     });
 
     $('#admin-student-list').addEventListener('click', function (e) {
+      var delBtn = e.target.closest('button[data-admin-delete]');
+      if (delBtn) {
+        var delTarget = findAdminStudent(delBtn.dataset.adminDelete);
+        if (delTarget) openDeleteStudentModal(delTarget);
+        return;
+      }
       var btn = e.target.closest('button[data-admin-edit]');
       if (btn) openAdminEdit(btn.dataset.adminEdit);
     });
@@ -4386,7 +4480,8 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
-        if (!$('#remark-modal').classList.contains('hidden')) closeRemarkModal();
+        if (!$('#delete-student-modal').classList.contains('hidden')) closeDeleteStudentModal();
+        else if (!$('#remark-modal').classList.contains('hidden')) closeRemarkModal();
         else if (!$('#semester-mgmt-modal').classList.contains('hidden')) {
           if (!$('#sm-edit-panel').classList.contains('hidden')) closeSemesterEdit();
           else closeSemesterMgmtModal();
