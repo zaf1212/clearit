@@ -363,6 +363,41 @@
     };
   }
 
+  // ── One A–Z student order for every table, search and filter ───────────
+  // Names are stored as "Last, First Middle"; legacy "First Last" values use
+  // their final token as the surname. Sorting happens after filtering too, so
+  // summary-card / Year / Block / search results keep the same strict order.
+  function studentSortLastName (s) {
+    if (!s) return '';
+    if (s.last_name) return String(s.last_name).trim();
+    var name = String(s.full_name || s.student_name || s.name || '').trim();
+    var comma = name.indexOf(',');
+    if (comma !== -1) return name.slice(0, comma).trim();
+    var tokens = name.split(/\s+/).filter(Boolean);
+    return tokens.length > 1 ? tokens[tokens.length - 1] : name;
+  }
+
+  function studentSortName (s) {
+    if (s && s.last_name) return String(s.last_name).trim();
+    return String((s && (s.full_name || s.student_name || s.name)) || '').trim();
+  }
+
+  function studentSortId (s) {
+    return String((s && (s.institutional_id || s.iId)) || '').trim();
+  }
+
+  function compareStudentsByName (a, b) {
+    var byLast = studentSortLastName(a).toLowerCase().localeCompare(studentSortLastName(b).toLowerCase());
+    if (byLast !== 0) return byLast;
+    var byFull = studentSortName(a).toLowerCase().localeCompare(studentSortName(b).toLowerCase());
+    if (byFull !== 0) return byFull;
+    return studentSortId(a).toLowerCase().localeCompare(studentSortId(b).toLowerCase());
+  }
+
+  function sortStudentsByName (list) {
+    return (list || []).slice().sort(compareStudentsByName);
+  }
+
   function firstNameOf (fullName) {
     var parsed = splitStudentName(fullName);
     return parsed.first || parsed.last || 'there';
@@ -1162,7 +1197,7 @@
         sig.role = officeLabel(r.category_name || SIG_LABELS[r.category_key] || '');
       }
     });
-    return Object.values(map);
+    return sortStudentsByName(Object.values(map));
   }
 
   function updateSaStatusCards () {
@@ -1232,13 +1267,13 @@
 
     // Filter — the status-card filter is combined with the existing search,
     // year-level and section dropdowns rather than replacing them.
-    var filtered = students.filter(function (st) {
+    var filtered = sortStudentsByName(students.filter(function (st) {
       var okYr  = !yr || st.yearLevel === yr;
       var okBlk = !blk || (st.sectionBlock || st.block) === blk;
       var okQ   = !q || st.name.toLowerCase().indexOf(q) !== -1 || st.iId.toLowerCase().indexOf(q) !== -1;
       var okStatus = saStatusFilter === 'all' || overallOf(st.sigs) === saStatusFilter;
       return okYr && okBlk && okQ && okStatus;
-    });
+    }));
 
     $('#sa-count').textContent = filtered.length;
 
@@ -1415,7 +1450,7 @@
 
   async function loadAdminStudentList () {
     try {
-      adminStudentList = await DB.getAllStudents();
+      adminStudentList = sortStudentsByName(await DB.getAllStudents());
     } catch (err) {
       console.error(err);
       toast('Failed to load student list: ' + err.message, 'error');
@@ -1453,12 +1488,12 @@
 
   function renderAdminList () {
     var q = ($('#admin-search').value || '').trim().toLowerCase();
-    var filtered = adminStudentList.filter(function (s) {
+    var filtered = sortStudentsByName(adminStudentList.filter(function (s) {
       return !q ||
         s.full_name.toLowerCase().indexOf(q) !== -1 ||
         s.institutional_id.toLowerCase().indexOf(q) !== -1 ||
         (s.email || '').toLowerCase().indexOf(q) !== -1;
-    });
+    }));
 
     var tbody = $('#admin-student-list');
     var rows = '';
@@ -3818,13 +3853,13 @@
   function blocksShownStudents () {
     var yr = $('#blocks-year-filter').value;
     var q  = $('#blocks-search').value.trim().toLowerCase();
-    return blocksStudents.filter(function (s) {
+    return sortStudentsByName(blocksStudents.filter(function (s) {
       var okYr = !yr || (s.yearLevel || '') === yr;
       var okQ  = !q ||
         (s.full_name && s.full_name.toLowerCase().indexOf(q) !== -1) ||
         (s.institutional_id && s.institutional_id.toLowerCase().indexOf(q) !== -1);
       return okYr && okQ;
-    });
+    }));
   }
 
   function updateBlocksSelectedCount () {
@@ -3861,7 +3896,7 @@
 
   async function loadBlocksStudents () {
     try {
-      blocksStudents = await DB.getAllStudents();
+      blocksStudents = sortStudentsByName(await DB.getAllStudents());
       renderBlocksList();
     } catch (err) {
       console.error('[CLEARIT] Blocks load error:', err);
@@ -4166,8 +4201,8 @@
       // Refresh the student tables/dashboards in memory — no page reload.
       var fresh = await DB.getAllStudents();
       var assignedIds = target.studentIds || [];
-      blocksStudents  = fresh;
-      adminStudentList = fresh.map(function (s) { return Object.assign({}, s); });
+      blocksStudents  = sortStudentsByName(fresh);
+      adminStudentList = sortStudentsByName(fresh.map(function (s) { return Object.assign({}, s); }));
       semesterStudents.forEach(function (s) {
         if (assignedIds.indexOf(s.student_id) !== -1) {
           s.sectionBlock = '';

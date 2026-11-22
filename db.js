@@ -37,6 +37,42 @@ var DB = (function () {
     return { yearLevel: year, sectionBlock: section };
   }
 
+  // ── Canonical A–Z student order ─────────────────────────────────────────
+  // `students` has no last_name column: names are stored as "Last, First M".
+  // Legacy "First Last" values fall back to their final token as the surname.
+  // Sorting at the data layer means every caller (dashboard, manage, blocks,
+  // search/filter results) receives rows in the same case-insensitive order.
+  function studentSortLastName (s) {
+    if (!s) return '';
+    if (s.last_name) return String(s.last_name).trim();
+    var name = String(s.full_name || s.student_name || s.name || '').trim();
+    var comma = name.indexOf(',');
+    if (comma !== -1) return name.slice(0, comma).trim();
+    var tokens = name.split(/\s+/).filter(Boolean);
+    return tokens.length > 1 ? tokens[tokens.length - 1] : name;
+  }
+
+  function studentSortName (s) {
+    if (s && s.last_name) return String(s.last_name).trim();
+    return String((s && (s.full_name || s.student_name || s.name)) || '').trim();
+  }
+
+  function studentSortId (s) {
+    return String((s && (s.institutional_id || s.iId)) || '').trim();
+  }
+
+  function compareStudentsByName (a, b) {
+    var byLast = studentSortLastName(a).toLowerCase().localeCompare(studentSortLastName(b).toLowerCase());
+    if (byLast !== 0) return byLast;
+    var byFull = studentSortName(a).toLowerCase().localeCompare(studentSortName(b).toLowerCase());
+    if (byFull !== 0) return byFull;
+    return studentSortId(a).toLowerCase().localeCompare(studentSortId(b).toLowerCase());
+  }
+
+  function sortStudentsByName (rows) {
+    return (rows || []).slice().sort(compareStudentsByName);
+  }
+
   // ── Signatory categories ───────────────────────────────────────────────
   async function getCategories () {
     var { data, error } = await window.supabase
@@ -295,7 +331,7 @@ var DB = (function () {
       lastErr = r.error;
     }
     if (!rows) throw friendlyError(lastErr, 'Could not load students for this term');
-    return rows.map(function (r) {
+    return sortStudentsByName(rows.map(function (r) {
       var parts = splitYearBlock(r.year_block);
       return {
         student_id: r[usedIdKey], institutional_id: r.institutional_id,
@@ -304,7 +340,7 @@ var DB = (function () {
         yearLevel: r.year_level || parts.yearLevel,
         sectionBlock: r.section_block || parts.sectionBlock
       };
-    });
+    }));
   }
 
   // ── Stamp ALL ACTIVE students with the newly initialized term ───────────
@@ -373,7 +409,7 @@ var DB = (function () {
       lastErr = r.error;
     }
     if (!rows) throw friendlyError(lastErr, 'Could not load the student list');
-    return rows.map(function (s) {
+    return sortStudentsByName(rows.map(function (s) {
       if (!('password_change_count' in s)) s.password_change_count = 0;
       var parts = splitYearBlock(s.year_block);
       s.yearLevel = s.year_level || parts.yearLevel;
@@ -382,7 +418,7 @@ var DB = (function () {
       // whole roster as Active so the status UI degrades gracefully.
       s.academicStatus = s.academic_status || 'Active';
       return s;
-    });
+    }));
   }
 
   // ── Student: change own password (new hash + incremented change counter) ─
