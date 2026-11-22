@@ -4,14 +4,14 @@
 -- Run this once in the Supabase SQL editor.
 --
 -- Why it is needed:
---   fn_guard_clearance_history() blocks UPDATE/DELETE on past-term
---   clearance_records. Editing or deleting an inactive term therefore fails
---   with restrict_violation unless the guard steps aside. This migration adds
---   a transaction-local bypass that is set only inside the two functions
---   below, and keeps the existing student-deletion bypass intact.
+--   fn_guard_clearance_history() permanently allows DELETE on every term,
+--   including past ones, while INSERT/UPDATE stay locked to the active term.
+--   Editing a past term still needs a transaction-local bypass for UPDATE;
+--   that flag is set only inside fn_update_semester_full() below. Deleting a
+--   term needs no bypass at all.
 
 -- -----------------------------------------------------------------------------
--- 1) History guard with controlled bypasses (student delete + semester manage)
+-- 1) History guard: writes locked, deletes always allowed
 -- -----------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION fn_guard_clearance_history()
 RETURNS TRIGGER
@@ -20,16 +20,29 @@ AS $$
 DECLARE
   v_active_sem TEXT;
   v_active_ay  TEXT;
-  v_allowed    BOOLEAN := true;
+  v_term_sem   TEXT;
+  v_term_ay    TEXT;
 BEGIN
-  -- Both settings are transaction-local (set_config(..., true)) and are only
-  -- enabled by the OSAS-only functions in this file / clearit_delete_student.sql.
-  IF current_setting('clearit.allow_student_delete', true) = 'on'
-     OR current_setting('clearit.allow_semester_manage', true) = 'on' THEN
-    IF TG_OP = 'DELETE' THEN
-      RETURN OLD;
-    END IF;
+  -- Deleting history is ALWAYS permitted, past terms included. This runs before
+  -- any active-term lookup so no inactive DELETE can be rejected here.
+  IF TG_OP = 'DELETE' THEN
+    RETURN OLD;
+  END IF;
+
+  -- Editing a past term is allowed only inside fn_update_semester_full(), which
+  -- sets this transaction-local flag. It has no effect on DELETE (already allowed).
+  IF current_setting('clearit.allow_semester_manage', true) = 'on' THEN
     RETURN NEW;
+  END IF;
+
+  -- INSERT/UPDATE stay locked to the active term. UPDATE is judged by the
+  -- stored term (OLD); INSERT has no OLD row, so it is judged by NEW.
+  IF TG_OP = 'UPDATE' THEN
+    v_term_sem := COALESCE(OLD.semester, '');
+    v_term_ay  := COALESCE(OLD.academic_year, '');
+  ELSE
+    v_term_sem := COALESCE(NEW.semester, '');
+    v_term_ay  := COALESCE(NEW.academic_year, '');
   END IF;
 
   SELECT semester, academic_year INTO v_active_sem, v_active_ay
@@ -37,21 +50,15 @@ BEGIN
   WHERE is_active
   LIMIT 1;
 
-  IF v_active_sem IS NOT NULL THEN
-    v_allowed := (COALESCE(OLD.semester, '') = v_active_sem
-              AND COALESCE(OLD.academic_year, '') = v_active_ay);
-  END IF;
-
-  IF NOT v_allowed THEN
+  -- With no active term configured there is nothing to protect, so allow it.
+  IF v_active_sem IS NOT NULL
+     AND (v_term_sem <> v_active_sem OR v_term_ay <> v_active_ay) THEN
     RAISE EXCEPTION
       'Clearance history is read-only: % / % cannot be modified. Only the active term (% / %) may be changed.',
-      OLD.semester, OLD.academic_year, v_active_sem, v_active_ay
+      v_term_sem, v_term_ay, v_active_sem, v_active_ay
       USING ERRCODE = 'restrict_violation';
   END IF;
 
-  IF TG_OP = 'DELETE' THEN
-    RETURN OLD;
-  END IF;
   RETURN NEW;
 END;
 $$;
@@ -101,6 +108,7 @@ BEGIN
     END IF;
   END IF;
 
+  -- UPDATE of a past term still needs the guard's transaction-local bypass.
   PERFORM set_config('clearit.allow_semester_manage', 'on', true);
 
   UPDATE clearance_records
@@ -150,7 +158,7 @@ BEGIN
     RAISE EXCEPTION 'Cannot delete the currently Active semester. Set another semester active first.';
   END IF;
 
-  PERFORM set_config('clearit.allow_semester_manage', 'on', true);
+  -- DELETE is permanently allowed by the guard; no bypass needed.
 
   DELETE FROM clearance_records
   WHERE semester = p_semester AND academic_year = p_academic_year;

@@ -1042,9 +1042,10 @@ var DB = (function () {
   }
 
   // ── OSAS Director: permanently remove a semester and its clearance rows ──
-  // The RPC (clearit_semester_delete.sql) is atomic and lifts the history
-  // guard for that transaction. The sequential fallback works only for terms
-  // the guard allows; any RLS/trigger error is surfaced verbatim to the UI.
+  // The RPC (clearit_semester_delete.sql) is atomic. The sequential fallback
+  // works for EVERY term now that fn_guard_clearance_history() permits DELETE
+  // unconditionally; it always removes child rows before the parent. Any RLS
+  // or trigger error is surfaced verbatim to the UI.
   async function deleteSemester (target, sasEmail) {
     var rpc = await window.supabase.rpc('fn_delete_semester_cascade', {
       p_semester_id:   target.id || null,
@@ -1286,7 +1287,8 @@ var DB = (function () {
       deleteRpcAvailable = false;
     }
 
-    // Fallback for databases without the RPC migration.
+    // Fallback for databases without the RPC migration. DELETE is now allowed
+    // on inactive terms, so every child row is removed before the parent.
     await deleteChildStudentRows(studentUUID);
 
     var del = await window.supabase
