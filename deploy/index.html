@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261122j" />
+  <link rel="stylesheet" href="styles.css?v=20261123a" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261122j"></script>
+  <script src="supabaseConfig.js?v=20261123a"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261122j"></script>
-  <script src="db.js?v=20261122j"></script>
+  <script src="supabaseClient.js?v=20261123a"></script>
+  <script src="db.js?v=20261123a"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -290,7 +290,7 @@
   <!-- ==================== SIGNATORY VIEW ==================== -->
   <main id="signatory-view" class="hidden min-h-screen bg-slate-100">
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-      <div class="app-header-inner max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="app-header-inner sa-wide-wrap max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="logo-holder logo-sm">C</div>
           <div>
@@ -330,7 +330,7 @@
       </div>
     </header>
 
-    <div class="max-w-[1400px] mx-auto px-4 py-8 fade-in">
+    <div class="sa-wide-wrap max-w-[1400px] mx-auto px-4 py-8 fade-in">
       <!-- Stats -->
       <div class="sa-summary-grid grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="all" aria-pressed="true">
@@ -409,8 +409,8 @@
 
       <!-- Table -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div class="table-scroll overflow-x-auto">
-          <table class="w-full min-w-[1100px] text-sm">
+        <div class="table-scroll sa-table-wrap overflow-x-auto">
+          <table class="sa-clearance-table w-full min-w-[1100px] text-sm">
             <thead>
               <tr id="sa-thead-row" class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"></tr>
             </thead>
@@ -1615,6 +1615,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261122j"></script>
+  <script src="app.js?v=20261123a"></script>
 </body>
 </html>

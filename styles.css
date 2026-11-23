@@ -811,3 +811,113 @@ body button {
     min-height: 44px;
   }
 }
+
+/* ===================== Desktop / laptop clearance dashboard =====================
+   On wide screens the full signatory table should be readable at once. The
+   smartphone rules above are deliberately untouched: touch scrolling and the
+   sticky first column still apply at <= 1023px. This block only widens the
+   wrapper, removes the artificial table min-width and compacts dense cells,
+   status pills and row buttons. */
+@media (min-width: 1024px) {
+  /* Header and content share this hook so their left/right edges line up. */
+  body .sa-wide-wrap {
+    width: 98%;
+    max-width: 1800px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+
+  /* No sideways scrolling on desktop — the table owns the full wrapper width. */
+  body .sa-table-wrap {
+    width: 100%;
+    max-width: 100%;
+    overflow: visible;
+  }
+
+  body .sa-clearance-table {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    table-layout: auto;
+  }
+
+  /* Neutralise the Tailwind min-w-* helpers so auto layout can distribute
+     space across every signatory column instead of forcing a 1100px table. */
+  body .sa-clearance-table thead th {
+    min-width: 0;
+  }
+
+  body .sa-clearance-table thead th,
+  body .sa-clearance-table tbody td {
+    padding: 8px 6px;
+  }
+
+  /* Body cells carry their own Tailwind min/max width helpers. Relax them so
+     auto layout can actually shrink the Overall and My Notes columns. */
+  body .sa-clearance-table tbody td {
+    min-width: 0;
+  }
+
+  body .sa-clearance-table tbody td[class*="max-w-"] {
+    max-width: 110px;
+  }
+
+  body #sa-thead-row {
+    font-size: 11px;
+  }
+
+  body .sa-clearance-table .chip {
+    padding: 3px 7px;
+    gap: 0.25rem;
+    font-size: 11px;
+    white-space: nowrap;
+  }
+
+  body .sa-clearance-table td button {
+    margin-right: 2px;
+    padding: 3px 7px;
+    font-size: 11px;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
+}
+
+/* Small laptops (1024–1279px) need a little more room for the ten signatory
+   columns. Drop the decorative chip icons and shave a few pixels so the whole
+   row still fits without a horizontal scrollbar. */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  body .sa-clearance-table .chip svg {
+    display: none;
+  }
+
+  body .sa-clearance-table .chip {
+    padding: 3px 5px;
+    font-size: 10px;
+  }
+
+  body .sa-clearance-table thead th,
+  body .sa-clearance-table tbody td {
+    padding-left: 4px;
+    padding-right: 4px;
+  }
+
+  body #sa-thead-row {
+    font-size: 10px;
+  }
+
+  body .sa-clearance-table tbody td[class*="max-w-"] {
+    max-width: 80px;
+  }
+
+  body .sa-clearance-table td button {
+    padding: 2px 5px;
+    font-size: 10px;
+  }
+
+  body .sa-wide-wrap {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
