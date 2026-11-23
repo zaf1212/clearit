@@ -172,6 +172,10 @@
   // 'all' shows the full cohort; the other values match overallOf() statuses.
   var saStatusFilter = 'all';
 
+  // Academic-standing filter (Regular / Irregular) from the filter bar. This is
+  // deliberately separate from saStatusFilter (cleared / pending / on_hold).
+  var saEnrollmentStatusFilter = '';
+
   // Signatory dashboard column focus. 'My Column Only' hides the other nine
   // office columns; the preference survives filters, actions and reloads.
   var SA_COLUMN_TOGGLE_KEY = 'clearit-sa-my-column-only';
@@ -856,6 +860,9 @@
     $('#login-password').value = '';
     hideLoginError();
     saStatusFilter = 'all';
+    saEnrollmentStatusFilter = '';
+    var statusFilterEl = $('#sa-status-filter');
+    if (statusFilterEl) statusFilterEl.value = '';
     updateSaStatusCards();
 
     // Load available semester options for the dropdown and the "Current Active
@@ -963,6 +970,9 @@
     studentPrereqBlocked = false;
     studentPrereqMsg = '';
     saStatusFilter = 'all';
+    saEnrollmentStatusFilter = '';
+    var statusFilterEl = $('#sa-status-filter');
+    if (statusFilterEl) statusFilterEl.value = '';
     updateSaStatusCards();
     semesterMgmtList = [];
     semesterEditTarget = null;
@@ -1184,11 +1194,12 @@
   // yet are appended so no record ever disappears.
   function buildSemesterStudents () {
     var map = {};
-    function seed (id, iId, name, block, program, yearLevel, sectionBlock) {
+    function seed (id, iId, name, block, program, yearLevel, sectionBlock, enrollmentStatus) {
       if (map[id]) return;
       map[id] = {
         uuid: id, iId: iId, name: name, block: block, program: program,
-        yearLevel: yearLevel || '', sectionBlock: sectionBlock || '', sigs: {}
+        yearLevel: yearLevel || '', sectionBlock: sectionBlock || '',
+        enrollmentStatus: enrollmentStatus || '', sigs: {}
       };
       SIG_KEYS.forEach(function (k) {
         map[id].sigs[k] = {
@@ -1200,10 +1211,12 @@
       });
     }
     semesterStudents.forEach(function (s) {
-      seed(s.student_id, s.institutional_id, s.full_name, s.year_block, s.program, s.yearLevel, s.sectionBlock);
+      seed(s.student_id, s.institutional_id, s.full_name, s.year_block, s.program,
+        s.yearLevel, s.sectionBlock, s.enrollmentStatus || s.enrollment_status);
     });
     allClearanceRows.forEach(function (r) {
-      seed(r.student_id, r.institutional_id, r.student_name, r.year_block, r.program, r.yearLevel, r.sectionBlock);
+      seed(r.student_id, r.institutional_id, r.student_name, r.year_block, r.program,
+        r.yearLevel, r.sectionBlock, r.enrollmentStatus || r.enrollment_status);
       var sig = map[r.student_id].sigs[r.category_key];
       if (sig) {
         sig.status = r.status;
@@ -1259,6 +1272,10 @@
     var q   = $('#sa-search').value.trim().toLowerCase();
     var yr  = $('#sa-year-filter').value;
     var blk = $('#sa-block-filter').value;
+    var statusSel = $('#sa-status-filter');
+    var enrollmentStatus = statusSel ? statusSel.value : saEnrollmentStatusFilter;
+    saEnrollmentStatusFilter = enrollmentStatus;
+    var enrollmentStatusKey = String(enrollmentStatus || '').trim().toLowerCase();
 
     updateSaStatusCards();
 
@@ -1312,13 +1329,17 @@
     if (curVal) sel.value = curVal;
 
     // Filter — the status-card filter is combined with the existing search,
-    // year-level and section dropdowns rather than replacing them.
+    // year-level, section and academic-standing dropdowns rather than replacing
+    // them. enrollment_status holds Regular / Irregular; overallOf() holds the
+    // clearance status used by the summary cards.
     var filtered = sortStudentsByName(students.filter(function (st) {
       var okYr  = !yr || st.yearLevel === yr;
       var okBlk = !blk || (st.sectionBlock || st.block) === blk;
       var okQ   = !q || st.name.toLowerCase().indexOf(q) !== -1 || st.iId.toLowerCase().indexOf(q) !== -1;
       var okStatus = saStatusFilter === 'all' || overallOf(st.sigs) === saStatusFilter;
-      return okYr && okBlk && okQ && okStatus;
+      var okEnrollment = !enrollmentStatusKey ||
+        String(st.enrollmentStatus || '').trim().toLowerCase() === enrollmentStatusKey;
+      return okYr && okBlk && okQ && okStatus && okEnrollment;
     }));
 
     $('#sa-count').textContent = filtered.length;
@@ -1389,6 +1410,8 @@
       rows +=
         '<tr class="hover:bg-slate-50/60 transition">' +
         '<td class="px-4 py-3.5"><div class="font-semibold text-slate-700">' + st.name + '</div><div class="text-xs text-slate-400 font-mono mt-0.5">' + st.iId + '</div>' +
+        (String(st.enrollmentStatus || '').trim().toLowerCase() === 'irregular'
+          ? '<div><span class="sa-status-badge">Irregular</span></div>' : '') +
         (blocked ? '<div class="mt-1.5"><span class="chip bg-red-100 text-red-700 ring-1 ring-inset ring-red-200">Blocked / Ineligible</span></div>' : '') +
         '</td>' +
         '<td class="px-2 py-3.5"><span class="chip bg-navy-50 text-navy-700 ring-1 ring-inset ring-navy-100">' + st.block + '</span></td>' +
@@ -1429,7 +1452,7 @@
       } else {
         $('#sa-empty').innerHTML =
           '<p class="text-sm font-semibold text-slate-500">No students match your filters.</p>' +
-          '<p class="text-xs text-slate-400 mt-1">Try a different search term or clear the Year/Block filter.</p>';
+          '<p class="text-xs text-slate-400 mt-1">Try a different search term or clear the Year/Section/Status filters.</p>';
       }
     }
     $('#sa-empty').classList.toggle('hidden', filtered.length > 0);
@@ -4768,6 +4791,12 @@
     });
     $('#sa-block-filter').addEventListener('change', function () {
       if (currentUser && currentUser.type === 'signatory') renderSignatory();
+    });
+    $('#sa-status-filter').addEventListener('change', function () {
+      if (currentUser && currentUser.type === 'signatory') {
+        saEnrollmentStatusFilter = this.value;
+        renderSignatory();
+      }
     });
     $('#sa-column-toggle').addEventListener('click', function () {
       if (!currentUser || currentUser.type !== 'signatory') return;

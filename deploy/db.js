@@ -282,9 +282,9 @@ var DB = (function () {
     // never displays an image. Only getStudentClearance (one student, feeding the
     // printable form) asks for it.
     var attempts = [
-      'student_id, institutional_id, student_name, year_block, program, academic_status, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
-      'student_id, institutional_id, student_name, year_block, program, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
-      'student_id, institutional_id, student_name, year_block, program, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name'
+      'student_id, institutional_id, student_name, year_block, program, enrollment_status, academic_status, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
+      'student_id, institutional_id, student_name, year_block, program, enrollment_status, year_level, section_block, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name',
+      'student_id, institutional_id, student_name, year_block, program, enrollment_status, category_key, category_name, signatory_name, status, remarks, signed_at, signed_by_name'
     ];
     var rows = null, lastErr = null;
     for (var i = 0; i < attempts.length; i++) {
@@ -301,6 +301,7 @@ var DB = (function () {
       r.yearLevel = r.year_level || parts.yearLevel;
       r.sectionBlock = r.section_block || parts.sectionBlock;
       r.academicStatus = r.academic_status || 'Active';
+      r.enrollmentStatus = r.enrollment_status || '';
       return r;
     });
   }
@@ -313,12 +314,12 @@ var DB = (function () {
   // (or the view columns) don't exist yet.
   async function getStudentsForSemester (semester, academicYear) {
     var attempts = [
-      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, academic_status, year_level, section_block' },
-      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, year_level, section_block' },
-      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program' },
-      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, academic_status, year_level, section_block' },
-      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, year_level, section_block' },
-      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program' }
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, enrollment_status, academic_status, year_level, section_block' },
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, enrollment_status, year_level, section_block' },
+      { from: 'v_student_progress', idKey: 'student_id', cols: 'student_id, institutional_id, full_name, year_block, program, enrollment_status' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, enrollment_status, academic_status, year_level, section_block' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, enrollment_status, year_level, section_block' },
+      { from: 'students',           idKey: 'id',          cols: 'id, institutional_id, full_name, year_block, program, enrollment_status' }
     ];
     var rows = null, lastErr = null, usedIdKey = 'student_id';
     for (var i = 0; i < attempts.length; i++) {
@@ -336,6 +337,7 @@ var DB = (function () {
       return {
         student_id: r[usedIdKey], institutional_id: r.institutional_id,
         full_name: r.full_name, year_block: r.year_block, program: r.program,
+        enrollmentStatus: r.enrollment_status || '',
         academicStatus: r.academic_status || 'Active',
         yearLevel: r.year_level || parts.yearLevel,
         sectionBlock: r.section_block || parts.sectionBlock

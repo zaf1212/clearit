@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261123e" />
+  <link rel="stylesheet" href="styles.css?v=20261123f" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261123e"></script>
+  <script src="supabaseConfig.js?v=20261123f"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261123e"></script>
-  <script src="db.js?v=20261123e"></script>
+  <script src="supabaseClient.js?v=20261123f"></script>
+  <script src="db.js?v=20261123f"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -403,6 +403,12 @@
           </div>
           <select id="sa-year-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-40 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
           <select id="sa-block-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-44 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
+          <select id="sa-status-filter" aria-label="Student status"
+            class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-40 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
+            <option value="">All Statuses</option>
+            <option value="Regular">Regular</option>
+            <option value="Irregular">Irregular</option>
+          </select>
           <button id="sa-column-toggle" type="button" aria-pressed="false"
             title="Show only my assigned signatory column"
             class="sa-column-toggle rounded-lg border border-navy-200 bg-navy-50 px-3 py-2.5 text-sm font-semibold text-navy-700 hover:bg-navy-100 transition whitespace-nowrap">
@@ -1718,6 +1724,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261123e"></script>
+  <script src="app.js?v=20261123f"></script>
 </body>
 </html>

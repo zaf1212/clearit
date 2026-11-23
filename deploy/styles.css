@@ -140,6 +140,35 @@ body {
   white-space: nowrap;
 }
 
+/* Subtle academic-standing marker in the signatory student cell. Regular
+   students need no marker; Irregular is visible at a glance without competing
+   with the clearance chips. */
+.sa-clearance-table .sa-status-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.35rem;
+  padding: 0.1rem 0.45rem;
+  border-radius: 9999px;
+  background: #ffedd5;
+  color: #9a3412;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.dark-theme .sa-clearance-table .sa-status-badge {
+  background: rgba(251, 146, 60, 0.16);
+  color: #fdba74;
+}
+
+/* The extra Status dropdown can push the counter onto a second line on narrow
+   desktops; wrapping the row keeps every control inside the document width. */
+body .sa-filter-row {
+  flex-wrap: wrap;
+}
+
 /* Blocks & Sections — assigned-student count badge */
 .section-count {
   display: inline-flex;
