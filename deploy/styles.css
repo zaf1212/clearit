@@ -921,3 +921,85 @@ body button {
     padding-right: 8px;
   }
 }
+
+/* ===================== OSAS Director — Signatory account management ===== */
+.sig-office-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background: rgba(30, 64, 175, 0.1);
+  color: #1d4ed8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.dark-theme .sig-office-badge {
+  background: rgba(59, 130, 246, 0.22);
+  color: #bfdbfe;
+}
+
+.sig-pw-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.35rem 0.7rem;
+  border: 1px solid #c7d2fe;
+  border-radius: 0.5rem;
+  background: #eef2ff;
+  color: #3730a3;
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1.2;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.sig-pw-btn:hover {
+  background: #e0e7ff;
+  border-color: #a5b4fc;
+}
+
+.sig-pw-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25);
+}
+
+.dark-theme .sig-pw-btn {
+  background: rgba(99, 102, 241, 0.2);
+  border-color: rgba(129, 140, 248, 0.4);
+  color: #c7d2fe;
+}
+
+.sig-pw-toggle {
+  color: #475569;
+  transition: color 0.15s ease;
+}
+
+.sig-pw-toggle:hover {
+  color: #1d4ed8;
+}
+
+.dark-theme .sig-pw-toggle {
+  color: #94a3b8;
+}
+
+/* The inline show/hide control is part of the input, not a modal action. */
+body .modal-panel button.sig-pw-toggle {
+  min-height: 0;
+}
+
+.sig-reset-who {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+  line-height: 1.6;
+}
+
+.dark-theme .sig-reset-who {
+  background: #1e293b;
+  border-color: #334155;
+  color: #e2e8f0;
+}

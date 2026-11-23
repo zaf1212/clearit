@@ -444,6 +444,57 @@ var DB = (function () {
     if (error) throw friendlyError(error, 'Could not change the password');
   }
 
+  // ── OSAS Director: signatory account directory ─────────────────────────
+  // Powers the Manage Signatories screen. The office label comes from the
+  // joined category; the second select keeps working on a database where that
+  // relationship has not been created yet.
+  async function getSignatoryAccounts () {
+    var attempts = [
+      'id, full_name, email, role, category_id, signatory_categories(id, key, name)',
+      'id, full_name, email, role, category_id'
+    ];
+    var data = null, lastErr = null;
+    for (var i = 0; i < attempts.length; i++) {
+      var r = await window.supabase.from('signatories').select(attempts[i]);
+      if (!r.error) { data = r.data || []; lastErr = null; break; }
+      lastErr = r.error;
+    }
+    if (!data) throw friendlyError(lastErr, 'Could not load signatory accounts');
+
+    return data.map(function (row) {
+      var cat = row.signatory_categories || {};
+      return {
+        id: row.id,
+        full_name: row.full_name || '',
+        email: row.email || '',
+        role: row.role || 'signatory',
+        category_key: cat.key || '',
+        category_name: cat.name || ''
+      };
+    }).sort(function (a, b) {
+      return a.category_name.toLowerCase().localeCompare(b.category_name.toLowerCase()) ||
+             a.full_name.toLowerCase().localeCompare(b.full_name.toLowerCase());
+    });
+  }
+
+  // ── OSAS Director: reset ANOTHER signatory's password ──────────────────
+  // Signatories are authenticated against this table (bcrypt compareSync in
+  // loginSignatory), not Supabase Auth. Writing password_hash is therefore the
+  // custom-table equivalent of auth.admin.updateUserById — no service_role RPC
+  // or Edge Function is involved. .select() makes a silent zero-row update (RLS
+  // filtering the write) visible instead of reporting a false success.
+  async function resetSignatoryPassword (signatoryUUID, passwordHash) {
+    var { data, error } = await window.supabase
+      .from('signatories')
+      .update({ password_hash: passwordHash })
+      .eq('id', signatoryUUID)
+      .select('id, full_name, email')
+      .maybeSingle();
+    if (error) throw friendlyError(error, 'Could not reset the password');
+    if (!data) throw new Error('No signatory account was updated. Database permission denied (RLS) or the account no longer exists.');
+    return data;
+  }
+
   // ── Signatory: save / clear their own digital signature ────────────────
   //
   // The image itself lives in Supabase Storage; the database only ever holds the
@@ -1343,6 +1394,8 @@ var DB = (function () {
   return {
     getCategories:          getCategories,
     getSignatorySignatures: getSignatorySignatures,
+    getSignatoryAccounts:   getSignatoryAccounts,
+    resetSignatoryPassword: resetSignatoryPassword,
     loginStudent:           loginStudent,
     loginSignatory:         loginSignatory,
     getStudentClearance:    getStudentClearance,

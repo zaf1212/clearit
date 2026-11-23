@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261123a" />
+  <link rel="stylesheet" href="styles.css?v=20261123b" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261123a"></script>
+  <script src="supabaseConfig.js?v=20261123b"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261123a"></script>
-  <script src="db.js?v=20261123a"></script>
+  <script src="supabaseClient.js?v=20261123b"></script>
+  <script src="db.js?v=20261123b"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -317,6 +317,10 @@
             <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
             Manage Blocks &amp; Sections
           </button>
+          <button id="sa-manage-signatories" title="Manage Signatory Accounts" class="hidden rounded-lg border border-navy-200 bg-navy-50 px-3 py-1.5 text-sm font-semibold text-navy-700 hover:bg-navy-100 transition">
+            <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            Manage Signatories
+          </button>
           <button id="sa-signature-btn" title="Manage your digital signature" class="rounded-lg border border-navy-200 bg-white px-3 py-1.5 text-sm font-semibold text-navy-700 hover:bg-navy-100 transition">
             <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15.232 5.487l3.768 3.768m-2.213-.807a1.125 1.125 0 01.22 1.12v5.25a2.25 2.25 0 01-1.632 2.163l-1.32.377a1.803 1.803 0 11-.99-3.467l2.31-.66a2.25 2.25 0 001.632-2.163zm0 0l1.06-1.06a2.343 2.343 0 013.515.515l2.365 2.365a2.343 2.343 0 010 3.314l-1.04 1.04a2.343 2.343 0 01-3.515-.515l-1.06-1.06a2.343 2.343 0 01-.515-3.515z"/></svg>
             <span id="sa-signature-label">Signature</span>
@@ -493,6 +497,98 @@
           <div class="modal-actions flex gap-3 mt-5">
             <button id="pw-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
             <button id="pw-save" type="submit" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Change Password</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== MANAGE SIGNATORIES (OSAS DIRECTOR ONLY) ==================== -->
+  <div id="signatories-modal" class="hidden fixed inset-0 z-50">
+    <div id="signatories-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-4xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+        <div class="flex items-start justify-between gap-3 px-6 py-5 border-b border-slate-200 shrink-0">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800">Signatory Accounts</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Reset the login password for any office account.</p>
+            </div>
+          </div>
+          <button id="signatories-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div class="px-6 py-4 overflow-y-auto flex-1">
+          <div id="signatories-loading" class="hidden py-10 text-center text-sm text-slate-500">Loading signatory accounts&hellip;</div>
+          <div id="signatories-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
+          <div id="signatories-empty" class="hidden py-10 text-center text-sm text-slate-500">No signatory accounts found.</div>
+          <div id="signatories-table-wrap" class="table-scroll overflow-x-auto hidden">
+            <table class="w-full min-w-[640px] text-sm">
+              <thead>
+                <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500">
+                  <th class="px-4 py-3 font-semibold">Role / Office</th>
+                  <th class="px-4 py-3 font-semibold">Full Name</th>
+                  <th class="px-4 py-3 font-semibold">Email / Login Username</th>
+                  <th class="px-4 py-3 font-semibold text-right">Password</th>
+                </tr>
+              </thead>
+              <tbody id="signatories-list" class="divide-y divide-slate-100"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="modal-actions flex justify-end px-6 py-4 border-t border-slate-200 shrink-0">
+          <button id="signatories-done" type="button" class="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Done</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ==================== RESET A SIGNATORY PASSWORD (OSAS DIRECTOR ONLY) ==================== -->
+  <div id="sig-reset-modal" class="hidden fixed inset-0 z-50">
+    <div id="sig-reset-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+        <div class="flex items-start justify-between mb-4">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center shrink-0">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-slate-800">Reset Signatory Password</h3>
+              <p class="text-xs text-slate-500 mt-0.5">Set a new login password for this signatory.</p>
+            </div>
+          </div>
+          <button id="sig-reset-close" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition" aria-label="Close">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+        </div>
+
+        <div id="sig-reset-who" class="sig-reset-who mb-4 rounded-lg px-3 py-2.5 text-sm"></div>
+
+        <form id="sig-reset-form" novalidate>
+          <div class="mb-4">
+            <label for="sig-reset-new" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">New Password</label>
+            <div class="relative">
+              <input id="sig-reset-new" type="password" autocomplete="new-password" minlength="8" placeholder="At least 8 characters"
+                class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 pr-20 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+              <button id="sig-reset-toggle" type="button" class="sig-pw-toggle absolute inset-y-0 right-0 flex items-center px-3 text-xs font-semibold" aria-label="Show password">Show</button>
+            </div>
+          </div>
+          <div class="mb-4">
+            <label for="sig-reset-confirm" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Confirm New Password</label>
+            <input id="sig-reset-confirm" type="password" autocomplete="new-password"
+              class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
+          </div>
+          <p id="sig-reset-error" class="hidden mt-2 text-xs text-red-600"></p>
+          <div class="modal-actions flex gap-3 mt-5">
+            <button id="sig-reset-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
+            <button id="sig-reset-save" type="submit" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Save New Password</button>
           </div>
         </form>
       </div>
@@ -1615,6 +1711,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261123a"></script>
+  <script src="app.js?v=20261123b"></script>
 </body>
 </html>

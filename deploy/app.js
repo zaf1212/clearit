@@ -75,6 +75,10 @@
   var forgotRole       = 'student'; // role selected inside the Forgot Password modal
   var remarkTarget     = null;
 
+  // OSAS Director — signatory account / password management state
+  var signatoryAccounts = [];   // signatory directory shown in the manage modal
+  var sigResetTarget    = null; // { id, full_name, email, category_name, role }
+
   /* ===================== Dark / Light theme ===================== */
   // Global theme toggle for the login page and both portals, persisted in
   // localStorage ('clearit-theme') so the chosen theme survives refreshes and
@@ -920,6 +924,9 @@
         // RBAC: only the OSAS Director gets Manage Blocks & Sections
         $('#sa-blocks-mgmt').classList.toggle('hidden', !isSAS);
 
+        // RBAC: only the OSAS Director gets Signatory Account / password management
+        $('#sa-manage-signatories').classList.toggle('hidden', !isSAS);
+
         // Preload DB-assigned sections so every Section/Block datalist already
         // knows about values like "Hope" or "talisay2" before the modal opens.
         if (isSAS) loadAssignedSections();
@@ -956,7 +963,10 @@
     $('#sa-manage-students').classList.add('hidden');
     $('#sa-semester-mgmt').classList.add('hidden');
     $('#sa-blocks-mgmt').classList.add('hidden');
+    $('#sa-manage-signatories').classList.add('hidden');
     $('#sa-signature-btn').classList.add('hidden');
+    closeSigResetModal();
+    closeSignatoriesModal();
     closeSignatureModal();
     showView('login');
   }
@@ -3594,6 +3604,151 @@
     document.body.style.overflow = '';
   }
 
+  /* ===================== Signatory accounts (OSAS Director) =====================
+     Signatories log in against the `signatories` table with a bcrypt hash, not
+     Supabase Auth. Resetting somebody else's password therefore writes that
+     row's password_hash column — supabase.auth.updateUser() would only ever
+     change the OSAS Director's own password. */
+
+  function openSignatoriesModal () {
+    if (!isSASDirector()) {
+      toast('Access denied. Only the OSAS Director can manage signatory accounts.', 'error');
+      return;
+    }
+    $('#signatories-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    $('#signatories-error').classList.add('hidden');
+    $('#signatories-loading').classList.remove('hidden');
+    $('#signatories-empty').classList.add('hidden');
+    $('#signatories-table-wrap').classList.add('hidden');
+    $('#signatories-list').innerHTML = '';
+    loadSignatoryAccounts();
+  }
+
+  function closeSignatoriesModal () {
+    $('#signatories-modal').classList.add('hidden');
+    // Keep the scroll lock while the reset sub-modal is still on screen.
+    if ($('#sig-reset-modal').classList.contains('hidden')) document.body.style.overflow = '';
+  }
+
+  async function loadSignatoryAccounts () {
+    try {
+      signatoryAccounts = await DB.getSignatoryAccounts();
+      renderSignatoryAccounts();
+    } catch (err) {
+      console.error(err);
+      $('#signatories-loading').classList.add('hidden');
+      $('#signatories-empty').classList.add('hidden');
+      $('#signatories-table-wrap').classList.add('hidden');
+      $('#signatories-error').textContent = 'Failed to load signatory accounts: ' + errorMessage(err);
+      $('#signatories-error').classList.remove('hidden');
+    }
+  }
+
+  function renderSignatoryAccounts () {
+    $('#signatories-loading').classList.add('hidden');
+    $('#signatories-error').classList.add('hidden');
+
+    if (!signatoryAccounts.length) {
+      $('#signatories-list').innerHTML = '';
+      $('#signatories-table-wrap').classList.add('hidden');
+      $('#signatories-empty').classList.remove('hidden');
+      return;
+    }
+
+    $('#signatories-empty').classList.add('hidden');
+    $('#signatories-table-wrap').classList.remove('hidden');
+    $('#signatories-list').innerHTML = signatoryAccounts.map(function (s) {
+      var office = s.category_name || (s.role === 'sas_director' ? 'Student Affairs Services Director' : s.role);
+      return '<tr class="hover:bg-slate-50/60 transition">' +
+        '<td class="px-4 py-3"><span class="sig-office-badge">' + escapeHtml(office) + '</span></td>' +
+        '<td class="px-4 py-3 font-semibold text-slate-700">' + escapeHtml(s.full_name || '\u2014') + '</td>' +
+        '<td class="px-4 py-3 text-slate-600 break-all">' + escapeHtml(s.email || '\u2014') + '</td>' +
+        '<td class="px-4 py-3 text-right whitespace-nowrap">' +
+          '<button type="button" class="sig-pw-btn" data-sig-reset="' + escapeHtml(s.id) + '">' +
+            '<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>' +
+            'Reset Password</button>' +
+        '</td></tr>';
+    }).join('');
+  }
+
+  function openSigResetModal (id) {
+    if (!isSASDirector()) {
+      toast('Access denied. Only the OSAS Director can reset signatory passwords.', 'error');
+      return;
+    }
+    var target = null;
+    for (var i = 0; i < signatoryAccounts.length; i++) {
+      if (String(signatoryAccounts[i].id) === String(id)) { target = signatoryAccounts[i]; break; }
+    }
+    if (!target) {
+      toast('That signatory account was not found. Close and reopen the list.', 'error');
+      return;
+    }
+
+    sigResetTarget = target;
+    var office = target.category_name || (target.role === 'sas_director' ? 'Student Affairs Services Director' : target.role);
+    $('#sig-reset-who').innerHTML =
+      '<div><strong class="font-bold">' + escapeHtml(target.full_name || 'Unnamed signatory') + '</strong></div>' +
+      '<div class="text-xs">' + escapeHtml(office) + ' &middot; ' + escapeHtml(target.email || 'No email on file') + '</div>';
+    $('#sig-reset-new').value = '';
+    $('#sig-reset-confirm').value = '';
+    setSigResetVisible(false);
+    $('#sig-reset-error').classList.add('hidden');
+    $('#sig-reset-modal').classList.remove('hidden');
+    document.body.style.overflow = 'hidden';
+    $('#sig-reset-new').focus();
+  }
+
+  function closeSigResetModal () {
+    $('#sig-reset-modal').classList.add('hidden');
+    sigResetTarget = null;
+    $('#sig-reset-new').value = '';
+    $('#sig-reset-confirm').value = '';
+    $('#sig-reset-error').classList.add('hidden');
+    if ($('#signatories-modal').classList.contains('hidden')) document.body.style.overflow = '';
+  }
+
+  function setSigResetVisible (visible) {
+    $('#sig-reset-new').type = visible ? 'text' : 'password';
+    $('#sig-reset-confirm').type = visible ? 'text' : 'password';
+    var toggle = $('#sig-reset-toggle');
+    toggle.textContent = visible ? 'Hide' : 'Show';
+    toggle.setAttribute('aria-label', visible ? 'Hide password' : 'Show password');
+  }
+
+  async function submitSigReset () {
+    if (!sigResetTarget || !isSASDirector()) return;
+
+    var pass = $('#sig-reset-new').value;
+    var confirm = $('#sig-reset-confirm').value;
+    var errEl = $('#sig-reset-error');
+    if (!pass) { errEl.textContent = 'Please enter a new password.'; errEl.classList.remove('hidden'); return; }
+    if (pass.length < 8) { errEl.textContent = 'Password must be at least 8 characters.'; errEl.classList.remove('hidden'); return; }
+    if (pass !== confirm) { errEl.textContent = 'Passwords do not match.'; errEl.classList.remove('hidden'); return; }
+    errEl.classList.add('hidden');
+
+    var btn = $('#sig-reset-save');
+    var original = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Saving\u2026';
+    try {
+      // Same column + same bcrypt cost the signatory login verifies.
+      var hash = window.bcrypt.hashSync(pass, 10);
+      var updated = await DB.resetSignatoryPassword(sigResetTarget.id, hash);
+      var who = (updated && updated.full_name) || sigResetTarget.full_name || 'the signatory';
+      closeSigResetModal();
+      toast('Password updated for ' + who + '. They can now log in with the new password.', 'success');
+    } catch (err) {
+      console.error(err);
+      errEl.textContent = 'Failed to reset password: ' + errorMessage(err);
+      errEl.classList.remove('hidden');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = original;
+    }
+  }
+
   /* ===================== Forgot Password (login page) ===================== */
   // Secure recovery: the public login page never writes new passwords.
   // Students identify their account and receive a Supabase email recovery
@@ -4703,6 +4858,26 @@
 
     // Blocks & Sections management (OSAS Director only)
     $('#sa-blocks-mgmt').addEventListener('click', openBlocksModal);
+
+    // OSAS Director — signatory accounts / password resets
+    $('#sa-manage-signatories').addEventListener('click', openSignatoriesModal);
+    $('#signatories-close').addEventListener('click', closeSignatoriesModal);
+    $('#signatories-backdrop').addEventListener('click', closeSignatoriesModal);
+    $('#signatories-done').addEventListener('click', closeSignatoriesModal);
+    $('#signatories-list').addEventListener('click', function (e) {
+      var btn = e.target.closest('button[data-sig-reset]');
+      if (btn) openSigResetModal(btn.getAttribute('data-sig-reset'));
+    });
+    $('#sig-reset-close').addEventListener('click', closeSigResetModal);
+    $('#sig-reset-backdrop').addEventListener('click', closeSigResetModal);
+    $('#sig-reset-cancel').addEventListener('click', closeSigResetModal);
+    $('#sig-reset-toggle').addEventListener('click', function () {
+      setSigResetVisible($('#sig-reset-new').type === 'password');
+    });
+    $('#sig-reset-form').addEventListener('submit', function (e) {
+      e.preventDefault();
+      submitSigReset();
+    });
     $('#blocks-close').addEventListener('click', closeBlocksModal);
     $('#blocks-backdrop').addEventListener('click', closeBlocksModal);
     $('#blocks-year-filter').addEventListener('change', renderBlocksList);
@@ -4868,7 +5043,9 @@
 
     document.addEventListener('keydown', function (e) {
       if (e.key === 'Escape') {
-        if (!$('#sm-edit-warning-modal').classList.contains('hidden')) closeSmEditWarning();
+        if (!$('#sig-reset-modal').classList.contains('hidden')) closeSigResetModal();
+        else if (!$('#signatories-modal').classList.contains('hidden')) closeSignatoriesModal();
+        else if (!$('#sm-edit-warning-modal').classList.contains('hidden')) closeSmEditWarning();
         else if (!$('#sm-delete-warning-modal').classList.contains('hidden')) closeSmDeleteWarning();
         else if (!$('#remove-section-modal').classList.contains('hidden')) closeRemoveSectionModal();
         else if (!$('#delete-student-modal').classList.contains('hidden')) closeDeleteStudentModal();
