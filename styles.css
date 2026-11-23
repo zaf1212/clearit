@@ -309,6 +309,29 @@ th.active-col {
   color: #19307a;
 }
 
+/* Signatory column focus toggle. Hidden cells keep their data-sig-col marker
+   so re-renders can restore them without rebuilding the header. */
+.sa-clearance-table [data-sig-col].sa-col-hidden {
+  display: none;
+}
+
+body .sa-column-toggle[aria-pressed="true"] {
+  background: #1d4ed8;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+
+body .sa-column-toggle[aria-pressed="true"]:hover {
+  background: #1e40af;
+  border-color: #1e40af;
+}
+
+.dark-theme body .sa-column-toggle[aria-pressed="true"] {
+  background: #2563eb;
+  border-color: #3b82f6;
+  color: #fff;
+}
+
 /* ---------- Print (certificate window) ---------- */
 @media print {
   body,

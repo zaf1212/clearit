@@ -172,6 +172,12 @@
   // 'all' shows the full cohort; the other values match overallOf() statuses.
   var saStatusFilter = 'all';
 
+  // Signatory dashboard column focus. 'My Column Only' hides the other nine
+  // office columns; the preference survives filters, actions and reloads.
+  var SA_COLUMN_TOGGLE_KEY = 'clearit-sa-my-column-only';
+  var saMyColumnOnly = false;
+  try { saMyColumnOnly = localStorage.getItem(SA_COLUMN_TOGGLE_KEY) === '1'; } catch (e) { saMyColumnOnly = false; }
+
   // Prerequisite (previous-semester) clearance state:
   // prevClearanceRows = records for the term BEFORE the selected one
   // blockedStudents   = { student_id: true } when that term has pending/hold
@@ -1218,6 +1224,36 @@
     });
   }
 
+  /* ===================== Signatory column focus toggle =====================
+     The toggle only affects presentation: approvals still write the same
+     category, and the stored preference is restored on the next login. */
+
+  function updateColumnToggleButton () {
+    var btn = $('#sa-column-toggle');
+    if (!btn) return;
+    btn.setAttribute('aria-pressed', saMyColumnOnly ? 'true' : 'false');
+    btn.title = saMyColumnOnly
+      ? 'Show all signatory columns'
+      : 'Show only my assigned signatory column';
+    var label = $('#sa-column-toggle-label');
+    if (label) label.textContent = saMyColumnOnly ? 'Show All Signatories' : 'My Column Only';
+  }
+
+  function applySignatoryColumnVisibility () {
+    var key = currentUser && currentUser.catKey;
+    var onlyMine = !!(saMyColumnOnly && key);
+    $$('#sa-clearance-table [data-sig-col]').forEach(function (cell) {
+      cell.classList.toggle('sa-col-hidden', onlyMine && cell.getAttribute('data-sig-col') !== key);
+    });
+    updateColumnToggleButton();
+  }
+
+  function setMyColumnOnly (value) {
+    saMyColumnOnly = !!value;
+    try { localStorage.setItem(SA_COLUMN_TOGGLE_KEY, saMyColumnOnly ? '1' : '0'); } catch (e) {}
+    applySignatoryColumnVisibility();
+  }
+
   function renderSignatory () {
     var key = currentUser.catKey;
     var q   = $('#sa-search').value.trim().toLowerCase();
@@ -1295,8 +1331,9 @@
       var sigCells = '';
       SIG_KEYS.forEach(function (sk) {
         var active = sk === key ? ' active-col' : '';
+        var hidden = (saMyColumnOnly && sk !== key) ? ' sa-col-hidden' : '';
         var d = st.sigs[sk];
-        sigCells += '<td class="px-2 py-3.5 text-center' + active + '">' + chip(d.status) + '</td>';
+        sigCells += '<td data-sig-col="' + escapeHtml(sk) + '" class="px-2 py-3.5 text-center' + active + hidden + '">' + chip(d.status) + '</td>';
       });
 
       var p = progressOf(st.sigs);
@@ -1397,10 +1434,12 @@
     }
     $('#sa-empty').classList.toggle('hidden', filtered.length > 0);
 
-    // Highlight active column header
+    // Highlight active column header, then re-apply the focus toggle to the
+    // freshly rendered row cells so filters and approvals never reset it.
     $$('th[data-sig-col]').forEach(function (th) {
       th.classList.toggle('active-col', th.getAttribute('data-sig-col') === key);
     });
+    applySignatoryColumnVisibility();
   }
 
   /* ===================== Remark modal ===================== */
@@ -4724,6 +4763,10 @@
     });
     $('#sa-block-filter').addEventListener('change', function () {
       if (currentUser && currentUser.type === 'signatory') renderSignatory();
+    });
+    $('#sa-column-toggle').addEventListener('click', function () {
+      if (!currentUser || currentUser.type !== 'signatory') return;
+      setMyColumnOnly(!saMyColumnOnly);
     });
 
     // Summary cards double as status filters for the table below.

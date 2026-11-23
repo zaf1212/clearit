@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261123b" />
+  <link rel="stylesheet" href="styles.css?v=20261123c" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261123b"></script>
+  <script src="supabaseConfig.js?v=20261123c"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261123b"></script>
-  <script src="db.js?v=20261123b"></script>
+  <script src="supabaseClient.js?v=20261123c"></script>
+  <script src="db.js?v=20261123c"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -403,6 +403,12 @@
           </div>
           <select id="sa-year-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-40 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
           <select id="sa-block-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm md:w-44 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none"></select>
+          <button id="sa-column-toggle" type="button" aria-pressed="false"
+            title="Show only my assigned signatory column"
+            class="sa-column-toggle rounded-lg border border-navy-200 bg-navy-50 px-3 py-2.5 text-sm font-semibold text-navy-700 hover:bg-navy-100 transition whitespace-nowrap">
+            <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 4h18M6 8h12M9 12h6m-9 4h12m-9 4h6"/></svg>
+            <span id="sa-column-toggle-label">My Column Only</span>
+          </button>
           <div class="flex items-center gap-2 text-xs text-slate-500 md:ml-auto">
             <span class="w-2.5 h-2.5 rounded-full bg-navy-600 animate-pulse"></span>
             <span><span id="sa-count">0</span> students shown</span>
@@ -414,7 +420,7 @@
       <!-- Table -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
         <div class="table-scroll sa-table-wrap overflow-x-auto">
-          <table class="sa-clearance-table w-full min-w-[1100px] text-sm">
+          <table id="sa-clearance-table" class="sa-clearance-table w-full min-w-[1100px] text-sm">
             <thead>
               <tr id="sa-thead-row" class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500"></tr>
             </thead>
@@ -1711,6 +1717,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261123b"></script>
+  <script src="app.js?v=20261123c"></script>
 </body>
 </html>
