@@ -626,3 +626,188 @@ body.dark-theme {
   border-color: #f87171;
   box-shadow: 0 0 0 3px rgba(248, 113, 113, 0.28), 0 10px 20px -14px rgba(0, 0, 0, 0.85);
 }
+
+/* ===================== Mobile / smartphone responsiveness =====================
+   Global overflow guard + width caps. The universal box-sizing rule at the top
+   already makes padding/borders count inside widths; these rules make sure no
+   nested card, form control or modal can push the document wider than the
+   viewport on a 360px–480px screen. */
+html,
+body {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+body main,
+body section,
+body form,
+body div,
+body .login-card {
+  max-width: 100%;
+}
+
+body input,
+body select,
+body textarea {
+  max-width: 100%;
+  min-width: 0;
+}
+
+body button {
+  max-width: 100%;
+}
+
+/* Any wide table lives in one of these wrappers: the wrapper stays inside the
+   viewport while the table scrolls sideways with native touch momentum. */
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Sticky first columns. Targeted by table ID so unrelated tables are untouched.
+   The solid fills match Tailwind's white/slate rows and the dark-theme palette. */
+#sa-thead-row > th:first-child,
+#sa-table-body > tr > td:first-child,
+#admin-students-table > thead > tr > th:first-child,
+#admin-student-list > tr > td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 2;
+  background-color: #ffffff;
+  box-shadow: 1px 0 0 rgba(148, 163, 184, 0.35);
+}
+
+#sa-thead-row > th:first-child,
+#admin-students-table > thead > tr > th:first-child {
+  z-index: 3;
+  background-color: #f8fafc;
+}
+
+#sa-table-body > tr:hover > td:first-child,
+#admin-student-list > tr:hover > td:first-child {
+  background-color: #f8fafc;
+}
+
+.dark-theme #sa-thead-row > th:first-child,
+.dark-theme #admin-students-table > thead > tr > th:first-child,
+.dark-theme #sa-table-body > tr > td:first-child,
+.dark-theme #admin-student-list > tr > td:first-child {
+  background-color: #1e293b;
+}
+
+.dark-theme #sa-table-body > tr:nth-child(even) > td:first-child,
+.dark-theme #admin-student-list > tr:nth-child(even) > td:first-child {
+  background-color: #16213a;
+}
+
+@media (max-width: 768px) {
+  /* Header: logo row on top, semester dropdown + actions wrap underneath. */
+  body .app-header-inner {
+    height: auto;
+    min-height: 64px;
+    flex-direction: column;
+    align-items: stretch;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  body .header-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  body .header-actions select {
+    width: 100%;
+    max-width: none;
+    flex: 1 1 100%;
+  }
+
+  body .header-actions button {
+    min-height: 44px;
+  }
+
+  /* Summary cards stay in a tidy 2-column grid with compact padding. */
+  body .sa-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  body .sa-stat-card {
+    padding: 12px;
+    min-height: 88px;
+  }
+
+  body .sa-stat-card .text-3xl {
+    font-size: 1.5rem;
+  }
+
+  body .sa-stat-card span.w-8 {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Search + Year + Block filters stack full width. */
+  body .sa-filter-row,
+  body .admin-search-row,
+  body .blocks-filter-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body .sa-filter-row > *,
+  body .admin-search-row > *,
+  body .blocks-filter-row > * {
+    width: 100%;
+  }
+
+  body .admin-search-row button {
+    white-space: normal;
+  }
+
+  /* Modals: 95% of the screen, capped at 90vh with internal scrolling. */
+  body .modal-overlay {
+    padding: 12px;
+    overflow-y: auto;
+  }
+
+  body .modal-panel {
+    width: 95%;
+    max-width: 95%;
+    /* vw keeps the panel at 95% of the real phone viewport even when a
+       scrollbar reduces the overlay's content width on desktop previews. */
+    width: 95vw;
+    max-width: 95vw;
+    flex: 0 0 auto;
+    max-height: 90vh;
+    overflow-y: auto;
+  }
+
+  body .modal-panel .modal-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  body .modal-panel .modal-actions > button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  body .modal-panel button {
+    min-height: 44px;
+  }
+
+  body .modal-panel button[aria-label="Close"] {
+    min-width: 44px;
+  }
+
+  body .modal-panel input,
+  body .modal-panel select,
+  body .modal-panel textarea {
+    min-height: 44px;
+  }
+}

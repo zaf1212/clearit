@@ -32,9 +32,9 @@
       }
     };
   </script>
-  <link rel="stylesheet" href="styles.css?v=20261122i" />
+  <link rel="stylesheet" href="styles.css?v=20261122j" />
   <script src="https://cdn.jsdelivr.net/npm/bcryptjs@2.4.3/dist/bcrypt.min.js"></script>
-  <script src="supabaseConfig.js?v=20261122i"></script>
+  <script src="supabaseConfig.js?v=20261122j"></script>
   <script type="module">
     // ESM import of @supabase/supabase-js@2 — initializes window.supabase (REST client)
     // Bundled flag reduces the module graph to a few requests; a timeout guard
@@ -67,8 +67,8 @@
       );
     })();
   </script>
-  <script src="supabaseClient.js?v=20261122i"></script>
-  <script src="db.js?v=20261122i"></script>
+  <script src="supabaseClient.js?v=20261122j"></script>
+  <script src="db.js?v=20261122j"></script>
 </head>
 <body class="min-h-screen bg-slate-100 font-sans text-slate-800 antialiased">
 
@@ -159,7 +159,7 @@
   <!-- ==================== STUDENT VIEW ==================== -->
   <main id="student-view" class="hidden min-h-screen bg-slate-100">
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-      <div class="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="app-header-inner max-w-6xl mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="logo-holder logo-sm">C</div>
           <div>
@@ -167,7 +167,7 @@
             <div class="text-[11px] text-slate-500 mt-0.5">Student Clearance Portal</div>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="header-actions flex items-center gap-2">
           <select id="sv-semester-select" title="Clearance semester" aria-label="Clearance semester"
             class="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 focus:border-tcc-navy focus:ring-2 focus:ring-tcc-navy/20 focus:outline-none max-w-[190px]"></select>
           <span class="hidden sm:flex items-center gap-2 mr-1">
@@ -290,7 +290,7 @@
   <!-- ==================== SIGNATORY VIEW ==================== -->
   <main id="signatory-view" class="hidden min-h-screen bg-slate-100">
     <header class="bg-white border-b border-slate-200 sticky top-0 z-40 shadow-sm">
-      <div class="max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
+      <div class="app-header-inner max-w-[1400px] mx-auto px-4 h-16 flex items-center justify-between gap-3">
         <div class="flex items-center gap-3">
           <div class="logo-holder logo-sm">C</div>
           <div>
@@ -298,7 +298,7 @@
             <div class="text-[11px] text-slate-500 mt-0.5">Signatory Portal &middot; <span id="sa-role-badge" class="font-semibold text-navy-700"></span></div>
           </div>
         </div>
-        <div class="flex items-center gap-2">
+        <div class="header-actions flex items-center gap-2">
           <select id="sa-semester-select" title="Clearance semester" aria-label="Clearance semester"
             class="rounded-lg border border-slate-300 bg-slate-50 px-2 py-1.5 text-xs font-semibold text-slate-600 focus:border-tcc-navy focus:ring-2 focus:ring-tcc-navy/20 focus:outline-none max-w-[190px]"></select>
           <span class="hidden sm:inline text-sm font-medium text-slate-600"><span id="sa-user-email" class="font-mono text-xs text-slate-400"></span></span>
@@ -332,7 +332,7 @@
 
     <div class="max-w-[1400px] mx-auto px-4 py-8 fade-in">
       <!-- Stats -->
-      <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="sa-summary-grid grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         <button type="button" class="sa-stat-card bg-white rounded-2xl border border-slate-200 shadow-sm p-5 w-full text-left" data-status-filter="all" aria-pressed="true">
           <div class="flex items-center justify-between">
             <span class="text-xs font-semibold uppercase tracking-wide text-slate-400">Total Students</span>
@@ -389,7 +389,7 @@
 
       <!-- Filters -->
       <div class="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 sm:p-5 mb-6">
-        <div class="flex flex-col md:flex-row md:items-center gap-3">
+        <div class="sa-filter-row flex flex-col md:flex-row md:items-center gap-3">
           <div class="relative flex-1">
             <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -428,8 +428,8 @@
   <!-- ==================== REMARK MODAL ==================== -->
   <div id="remark-modal" class="hidden fixed inset-0 z-50">
     <div id="remark-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
@@ -448,7 +448,7 @@
         <label for="remark-textarea" class="block text-xs font-semibold uppercase tracking-wide text-slate-500 mb-1.5">Remarks / Note</label>
         <textarea id="remark-textarea" rows="4" placeholder="e.g. Please settle outstanding balance at the Treasury office." class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none resize-none"></textarea>
         <p id="remark-error" class="hidden mt-2 text-xs text-red-600">Please enter a remark before flagging the student.</p>
-        <div class="flex gap-3 mt-5">
+        <div class="modal-actions flex gap-3 mt-5">
           <button id="remark-cancel" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="remark-save" data-orig-text="Save &amp; Flag" class="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:bg-red-700 transition">Save &amp; Flag</button>
         </div>
@@ -459,8 +459,8 @@
   <!-- ==================== CHANGE PASSWORD MODAL (STUDENT — 3-RESET LIMIT) ==================== -->
   <div id="password-modal" class="hidden fixed inset-0 z-50">
     <div id="pw-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-navy-50 text-navy-700 flex items-center justify-center">
@@ -490,7 +490,7 @@
               class="w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
           </div>
           <p id="pw-error" class="hidden mt-2 text-xs text-red-600"></p>
-          <div class="flex gap-3 mt-5">
+          <div class="modal-actions flex gap-3 mt-5">
             <button id="pw-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
             <button id="pw-save" type="submit" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Change Password</button>
           </div>
@@ -502,8 +502,8 @@
   <!-- ==================== STUDENT HELP & FAQ MODAL ==================== -->
   <div id="faq-modal" class="hidden fixed inset-0 z-50">
     <div id="faq-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
 
         <!-- Header -->
         <div class="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-200 shrink-0">
@@ -607,8 +607,8 @@
   <!-- ==================== FORGOT PASSWORD MODAL (LOGIN PAGE) ==================== -->
   <div id="forgot-modal" class="hidden fixed inset-0 z-50">
     <div id="forgot-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
 
         <!-- Header -->
         <div class="flex items-start justify-between px-6 pt-5 pb-4 border-b border-slate-200">
@@ -668,7 +668,7 @@
           </div>
           <h4 class="font-bold text-slate-800">Check your TCC email</h4>
           <p class="text-xs sm:text-sm text-slate-600 leading-relaxed mt-2">A security code / link has been sent to your official TCC email. Please check your inbox to reset your password.</p>
-          <div class="flex gap-3 mt-6">
+          <div class="modal-actions flex gap-3 mt-6">
             <button id="forgot-resend" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Resend Link</button>
             <button id="forgot-done" type="button" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Back to Login</button>
           </div>
@@ -680,8 +680,8 @@
   <!-- ==================== SEMESTER CLEARANCE MANAGEMENT MODAL (OSAS DIRECTOR ONLY) ==================== -->
   <div id="semester-mgmt-modal" class="hidden fixed inset-0 z-50">
     <div id="semester-mgmt-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -752,7 +752,7 @@
                     </select>
                   </div>
                 </div>
-                <div class="flex justify-end mt-4">
+                <div class="modal-actions flex justify-end mt-4">
                   <button id="sm-wiz-1-next" type="button" class="rounded-lg bg-amber-600 px-5 py-2.5 text-sm font-bold text-white shadow-lg shadow-amber-600/25 hover:bg-amber-700 transition">
                     Continue
                   </button>
@@ -798,7 +798,7 @@
                   </label>
 
                 </div>
-                <div class="flex justify-between gap-2 mt-4">
+                <div class="modal-actions flex justify-between gap-2 mt-4">
                   <button id="sm-wiz-2-back" type="button" class="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">
                     Back
                   </button>
@@ -908,7 +908,7 @@
 
                 <div id="sm-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
 
-                <div class="flex justify-between gap-2 mt-4">
+                <div class="modal-actions flex justify-between gap-2 mt-4">
                   <button id="sm-wiz-3-back" type="button" class="rounded-lg border border-slate-300 px-5 py-2.5 text-sm font-bold text-slate-600 hover:bg-slate-50 transition">
                     Back
                   </button>
@@ -974,7 +974,7 @@
 
             <div id="sm-edit-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
 
-            <div class="flex gap-3 pt-2">
+            <div class="modal-actions flex gap-3 pt-2">
               <button id="sm-edit-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
               <button id="sm-edit-save" type="button" data-orig-text="Save Changes" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Save Changes</button>
             </div>
@@ -987,8 +987,8 @@
   <!-- ==================== BLOCKS & SECTIONS MANAGEMENT MODAL (OSAS DIRECTOR ONLY) ==================== -->
   <div id="blocks-modal" class="hidden fixed inset-0 z-50">
     <div id="blocks-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-3xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1016,7 +1016,7 @@
               Filter students by Year Level, then select the ones to assign. The assignment updates
               <b>Year Level</b> and <b>Section / Block</b> everywhere — student &amp; signatory dashboards included.
             </p>
-            <div class="flex flex-col sm:flex-row gap-3">
+            <div class="blocks-filter-row flex flex-col sm:flex-row gap-3">
               <select id="blocks-year-filter" class="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm sm:w-44 focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:outline-none">
                 <option value="">All Year Levels</option>
                 <option>1st Year</option>
@@ -1085,7 +1085,7 @@
                 </p>
               </div>
             </div>
-            <div class="flex gap-2">
+            <div class="modal-actions flex gap-2">
               <input id="blocks-new-section" type="text" placeholder="e.g. BSCS 4-A" maxlength="40"
                 class="flex-1 min-w-0 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm focus:border-navy-700 focus:ring-2 focus:ring-navy-700/20 focus:bg-white focus:outline-none" />
               <button id="blocks-add-section" data-orig-text="Add Section"
@@ -1097,7 +1097,7 @@
           </div>
 
           <!-- Student list -->
-          <div class="rounded-xl border border-slate-200 overflow-hidden">
+          <div class="table-scroll rounded-xl border border-slate-200 overflow-hidden">
             <table class="w-full text-sm">
               <thead>
                 <tr class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
@@ -1131,8 +1131,8 @@
   <!-- ==================== ADMIN STUDENT MANAGEMENT MODAL ==================== -->
   <div id="admin-modal" class="hidden fixed inset-0 z-50">
     <div id="admin-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-6xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-6xl bg-white rounded-2xl shadow-2xl max-h-[90vh] flex flex-col">
 
         <!-- Header -->
         <div class="flex items-center justify-between px-6 py-4 border-b border-slate-200 shrink-0">
@@ -1153,7 +1153,7 @@
         <!-- Student list panel (shown by default) -->
         <div id="admin-list-panel" class="flex-1 overflow-y-auto">
           <!-- Search + Add button -->
-          <div class="px-6 pt-4 pb-3 flex items-center gap-3">
+          <div class="admin-search-row px-6 pt-4 pb-3 flex items-center gap-3">
             <div class="relative flex-1">
               <span class="absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
@@ -1170,7 +1170,7 @@
           <!-- Student table -->
           <div class="px-6 pb-4">
             <div class="table-scroll overflow-x-auto">
-              <table class="w-full min-w-[980px] text-sm">
+              <table id="admin-students-table" class="w-full min-w-[980px] text-sm">
                 <thead>
                   <tr class="text-left text-xs uppercase tracking-wide text-slate-500 border-b border-slate-200">
                     <th class="pb-2 font-semibold">Student ID</th>
@@ -1291,7 +1291,7 @@
 
             <div id="admin-edit-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
 
-            <div class="flex gap-3 pt-2">
+            <div class="modal-actions flex gap-3 pt-2">
               <button id="admin-edit-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
               <button id="admin-edit-save" type="submit" data-orig-text="Save Changes" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Save Changes</button>
             </div>
@@ -1386,7 +1386,7 @@
 
             <div id="admin-register-error" class="hidden mb-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-sm text-red-700"></div>
 
-            <div class="flex gap-3 pt-2">
+            <div class="modal-actions flex gap-3 pt-2">
               <button id="admin-register-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
               <button id="admin-register-submit" type="submit" data-orig-text="Register Student" class="flex-1 rounded-lg bg-emerald-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-emerald-600/25 hover:bg-emerald-700 transition">
                 <svg class="w-4 h-4 inline mr-1 -mt-0.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
@@ -1403,8 +1403,8 @@
   <!-- ==================== DELETE STUDENT CONFIRMATION ==================== -->
   <div id="delete-student-modal" class="hidden fixed inset-0 delete-confirm-modal">
     <div id="delete-student-backdrop" class="absolute inset-0 bg-navy-900/60 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
@@ -1423,7 +1423,7 @@
         <p id="delete-student-message" class="text-sm leading-relaxed text-slate-700"></p>
         <div id="delete-student-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 break-words"></div>
 
-        <div class="flex gap-3 mt-6">
+        <div class="modal-actions flex gap-3 mt-6">
           <button id="delete-student-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="delete-student-confirm" type="button" data-orig-text="Delete Student" class="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:bg-red-700 transition">Delete Student</button>
         </div>
@@ -1435,8 +1435,8 @@
   <!-- ==================== REMOVE SECTION CONFIRMATION ==================== -->
   <div id="remove-section-modal" class="hidden fixed inset-0 remove-section-modal">
     <div id="remove-section-backdrop" class="absolute inset-0 bg-navy-900/60 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
@@ -1455,7 +1455,7 @@
         <p id="remove-section-message" class="text-sm leading-relaxed text-slate-700"></p>
         <div id="remove-section-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 break-words"></div>
 
-        <div class="flex gap-3 mt-6">
+        <div class="modal-actions flex gap-3 mt-6">
           <button id="remove-section-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="remove-section-confirm" type="button" class="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:bg-red-700 transition">Remove Section</button>
         </div>
@@ -1467,8 +1467,8 @@
   <!-- ==================== SEMESTER EDIT WARNING ==================== -->
   <div id="sm-edit-warning-modal" class="hidden fixed inset-0 sm-warning-modal">
     <div id="sm-edit-warning-backdrop" class="absolute inset-0 bg-navy-900/60 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
@@ -1486,7 +1486,7 @@
 
         <p id="sm-edit-warning-message" class="text-sm leading-relaxed text-slate-700"></p>
 
-        <div class="flex gap-3 mt-6">
+        <div class="modal-actions flex gap-3 mt-6">
           <button id="sm-edit-warning-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="sm-edit-warning-confirm" type="button" class="flex-1 rounded-lg bg-navy-700 py-2.5 text-sm font-bold text-white shadow-lg shadow-navy-700/25 hover:bg-navy-800 transition">Continue to Edit</button>
         </div>
@@ -1497,8 +1497,8 @@
   <!-- ==================== SEMESTER DELETE WARNING ==================== -->
   <div id="sm-delete-warning-modal" class="hidden fixed inset-0 sm-warning-modal">
     <div id="sm-delete-warning-backdrop" class="absolute inset-0 bg-navy-900/60 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4">
-      <div class="fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4">
+      <div class="modal-panel fade-in w-full max-w-md bg-white rounded-2xl shadow-2xl p-6 sm:p-7">
         <div class="flex items-start justify-between mb-4">
           <div class="flex items-center gap-3">
             <div class="w-10 h-10 rounded-xl bg-red-50 text-red-600 flex items-center justify-center">
@@ -1517,7 +1517,7 @@
         <p id="sm-delete-warning-message" class="text-sm leading-relaxed text-slate-700"></p>
         <div id="sm-delete-warning-error" class="hidden mt-4 rounded-lg bg-red-50 border border-red-200 px-3 py-2.5 text-xs text-red-700 break-words"></div>
 
-        <div class="flex gap-3 mt-6">
+        <div class="modal-actions flex gap-3 mt-6">
           <button id="sm-delete-warning-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="sm-delete-warning-confirm" type="button" class="flex-1 rounded-lg bg-red-600 py-2.5 text-sm font-bold text-white shadow-lg shadow-red-600/25 hover:bg-red-700 transition">Delete Semester</button>
         </div>
@@ -1529,8 +1529,8 @@
   <!-- ==================== DIGITAL SIGNATURE MODAL ==================== -->
   <div id="signature-modal" class="hidden fixed inset-0 z-50">
     <div id="signature-backdrop" class="absolute inset-0 bg-navy-900/50 backdrop-blur-sm"></div>
-    <div class="relative min-h-full flex items-center justify-center p-4 overflow-y-auto">
-      <div class="fade-in w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 sm:p-7 my-8">
+    <div class="modal-overlay relative min-h-full flex items-center justify-center p-4 overflow-y-auto">
+      <div class="modal-panel fade-in w-full max-w-lg bg-white rounded-2xl shadow-2xl p-6 sm:p-7 my-8">
 
         <div class="flex items-start justify-between mb-1">
           <div class="flex items-center gap-3">
@@ -1574,7 +1574,7 @@
             <canvas id="sig-canvas" class="block w-full touch-none cursor-crosshair" height="180" aria-label="Signature drawing area"></canvas>
             <span id="sig-canvas-placeholder" class="absolute inset-0 flex items-center justify-center text-sm text-slate-300 pointer-events-none">Draw your signature here</span>
           </div>
-          <div class="flex gap-2 mt-3">
+          <div class="modal-actions flex gap-2 mt-3">
             <button id="sig-clear" type="button" class="flex-1 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Clear</button>
             <button id="sig-undo" type="button" class="flex-1 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Undo Stroke</button>
           </div>
@@ -1589,7 +1589,7 @@
             <span class="block text-xs text-slate-400 mt-0.5">PNG or JPG, up to 4 MB</span>
           </label>
           <input id="sig-file" type="file" accept="image/png,image/jpeg" class="hidden">
-          <div class="mt-3 flex gap-2">
+          <div class="modal-actions mt-3 flex gap-2">
             <button id="sig-bg-remove" type="button" class="flex-1 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Remove Background</button>
             <button id="sig-crop" type="button" class="flex-1 rounded-lg border border-slate-300 bg-white py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Trim to Ink</button>
           </div>
@@ -1605,7 +1605,7 @@
 
         <p id="sig-error" class="mt-3 text-xs font-semibold text-red-600 hidden"></p>
 
-        <div class="flex gap-2 mt-5">
+        <div class="modal-actions flex gap-2 mt-5">
           <button id="sig-remove" type="button" class="rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm font-semibold text-red-600 hover:bg-red-100 transition">Remove</button>
           <button id="sig-cancel" type="button" class="flex-1 rounded-lg border border-slate-300 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-50 transition">Cancel</button>
           <button id="sig-save" type="button" disabled
@@ -1615,6 +1615,6 @@
     </div>
   </div>
 
-  <script src="app.js?v=20261122i"></script>
+  <script src="app.js?v=20261122j"></script>
 </body>
 </html>

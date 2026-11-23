@@ -3392,8 +3392,11 @@
     });
 
     var html =
-      '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Clearance \u2014 ' + currentUser.name + '</title>' +
+      '<!DOCTYPE html><html><head><meta charset="utf-8">' +
+      '<meta name="viewport" content="width=device-width, initial-scale=1.0">' +
+      '<title>Clearance \u2014 ' + currentUser.name + '</title>' +
       '<style>' +
+      '*,*::before,*::after{box-sizing:border-box;}' +
       'body{font-family:Segoe UI,Arial,sans-serif;color:#0f172a;margin:0;padding:40px;}' +
       '.sheet{max-width:740px;margin:0 auto;border:3px solid #1E3A8A;padding:40px;border-radius:8px;position:relative;}' +
       '.head{text-align:center;border-bottom:2px solid #1E3A8A;padding-bottom:16px;margin-bottom:26px;}' +
@@ -3450,6 +3453,20 @@
       '.footer{margin-top:30px;padding-top:14px;border-top:1px solid #cbd5e1;}' +
       '.footer .reminder{color:#b91c1c;font-weight:700;font-size:11px;text-align:center;}' +
       '.foot{margin-top:14px;text-align:center;font-size:10px;color:#64748b;}' +
+      // Screen preview on a phone: keep the A4 layout for printing, but make the
+      // on-screen preview fit a 360px–480px viewport without sideways scrolling.
+      '@media screen and (max-width:768px){' +
+      'body{padding:12px;}' +
+      '.sheet{max-width:100%;padding:16px;border-width:2px;border-radius:6px;}' +
+      'h1{font-size:20px;}' +
+      '.info{gap:10px;font-size:12px;}' +
+      'th,td{padding:6px 7px;font-size:11px;}' +
+      '.verify-zone{gap:12px;flex-wrap:wrap;}' +
+      '.sigs{grid-template-columns:repeat(2,1fr);gap:12px;margin-top:24px;}' +
+      '.sig.president{grid-column:1/-1;}' +
+      '.stamp-unofficial{font-size:14px;padding:7px 14px;white-space:normal;}' +
+      '.unofficial-note{font-size:10.5px;}' +
+      '}' +
       '</style></head><body><div class="sheet">' +
       '<div class="head"><div class="school">TALISAY CITY COLLEGE</div><h1>CLEARANCE FORM</h1>' +
       '<div class="sub">College of Information Technology &mdash; CLEARIT</div></div>' +
