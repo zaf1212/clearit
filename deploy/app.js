@@ -3826,13 +3826,16 @@
     });
     $('#forgot-error').classList.add('hidden');
     if (role === 'signatory') {
-      // Signatory / Admin: self-service reset blocked — show the restriction only.
+      // Signatory / Admin: self-service reset is blocked. Hide the send button
+      // entirely so no verification code / email can be requested from here.
       $('#forgot-student-fields').classList.add('hidden');
       $('#forgot-signatory-block').classList.remove('hidden');
+      $('#forgot-submit').classList.add('hidden');
       $('#forgot-submit').disabled = true;
     } else {
       $('#forgot-student-fields').classList.remove('hidden');
       $('#forgot-signatory-block').classList.add('hidden');
+      $('#forgot-submit').classList.remove('hidden');
       $('#forgot-submit').disabled = false;
       $('#forgot-id-label').textContent = 'Institutional ID';
       $('#forgot-id').placeholder = 'e.g. 2023-5548';
@@ -4538,6 +4541,8 @@
     });
     $('#forgot-form').addEventListener('submit', function (e) {
       e.preventDefault();
+      // The signatory tab has no send button; guard programmatic submits too.
+      if (forgotRole !== 'student') return;
       submitForgotRequest();
     });
     $('#forgot-resend').addEventListener('click', resendForgotRequest);
