@@ -3446,75 +3446,75 @@
       '<title>Clearance \u2014 ' + currentUser.name + '</title>' +
       '<style>' +
       '*,*::before,*::after{box-sizing:border-box;}' +
-      'body{font-family:Segoe UI,Arial,sans-serif;color:#0f172a;margin:0;padding:40px;}' +
-      '.sheet{max-width:740px;margin:0 auto;border:3px solid #1E3A8A;padding:40px;border-radius:8px;position:relative;}' +
-      '.head{text-align:center;border-bottom:2px solid #1E3A8A;padding-bottom:16px;margin-bottom:26px;}' +
-      '.school{font-size:11px;letter-spacing:.22em;color:#1E3A8A;font-weight:700;}' +
-      'h1{margin:6px 0 2px;font-size:24px;letter-spacing:.06em;}' +
-      '.sub{color:#334155;font-size:13px;}' +
-      '.info{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:22px;font-size:13px;}' +
-      '.info b{display:block;font-size:10px;text-transform:uppercase;color:#64748b;letter-spacing:.08em;}' +
-      'table{width:100%;border-collapse:collapse;font-size:12.5px;}' +
-      'th,td{border:1px solid #cbd5e1;padding:8px 10px;text-align:left;}' +
-      'th{background:#eff4fb;color:#1E3A8A;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}' +
-      '.verify-zone{display:flex;align-items:center;justify-content:center;gap:30px;margin:26px 0 6px;}' +
+      'body{font-family:Segoe UI,Arial,sans-serif;color:#0f172a;margin:0;padding:24px;}' +
+      '.sheet{max-width:740px;margin:0 auto;border:2px solid #1E3A8A;padding:20px;border-radius:6px;position:relative;}' +
+      '.head{text-align:center;border-bottom:1.5px solid #1E3A8A;padding-bottom:6px;margin-bottom:8px;}' +
+      '.school{font-size:9px;letter-spacing:.2em;color:#1E3A8A;font-weight:700;}' +
+      'h1{margin:2px 0 1px;font-size:18px;letter-spacing:.06em;}' +
+      '.sub{color:#334155;font-size:10px;}' +
+      '.info{display:flex;justify-content:space-between;gap:8px 12px;flex-wrap:wrap;margin-bottom:8px;font-size:10.5px;line-height:1.25;}' +
+      '.info b{display:block;font-size:8px;text-transform:uppercase;color:#64748b;letter-spacing:.06em;}' +
+      'table{width:100%;border-collapse:collapse;font-size:10px;line-height:1.2;}' +
+      'th,td{border:1px solid #cbd5e1;padding:3px 6px;text-align:left;}' +
+      'th{background:#eff4fb;color:#1E3A8A;font-size:9px;text-transform:uppercase;letter-spacing:.04em;}' +
+      '.verify-zone{display:flex;align-items:center;justify-content:center;gap:14px;margin:6px 0;}' +
       '.seal-box{flex:0 0 auto;}' +
-      '.digiseal{display:block;}' +
-      '.verify-side{display:flex;flex-direction:column;align-items:center;gap:10px;}' +
-      '.seal{text-align:center;color:#047857;font-weight:700;font-size:13px;}' +
-      '.qr-wrap{display:flex;flex-direction:column;align-items:center;gap:6px;border:1.5px dashed #047857;border-radius:8px;padding:10px 14px;background:#f8fafc;}' +
-      '.qr{width:104px;height:104px;}' +
-      '.ctrl{font-size:10.5px;font-weight:800;color:#0f172a;letter-spacing:.05em;}' +
-      '.stamp-unofficial{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-14deg);border:3px solid #b91c1c;color:#b91c1c;font-weight:800;font-size:20px;letter-spacing:.12em;padding:10px 30px;border-radius:6px;opacity:.9;background:rgba(255,255,255,.55);z-index:5;text-align:center;white-space:nowrap;}' +
-      '.unofficial-note{margin:22px auto 0;max-width:560px;text-align:center;color:#b91c1c;font-weight:600;font-size:11.5px;border:1.5px solid #fecaca;background:#fef2f2;padding:10px 14px;border-radius:8px;}' +
+      '.digiseal{display:block;width:65px;height:65px;}' +
+      '.verify-side{display:flex;flex-direction:column;align-items:center;gap:4px;}' +
+      '.seal{text-align:center;color:#047857;font-weight:700;font-size:9px;line-height:1.2;}' +
+      '.qr-wrap{display:flex;flex-direction:column;align-items:center;gap:2px;border:1px dashed #047857;border-radius:5px;padding:4px 6px;background:#f8fafc;}' +
+      '.qr{width:65px;height:65px;}' +
+      '.ctrl{font-size:8px;font-weight:800;color:#0f172a;letter-spacing:.04em;}' +
+      '.stamp-unofficial{position:absolute;top:44%;left:50%;transform:translate(-50%,-50%) rotate(-14deg);border:2px solid #b91c1c;color:#b91c1c;font-weight:800;font-size:14px;letter-spacing:.1em;padding:6px 16px;border-radius:5px;opacity:.9;background:rgba(255,255,255,.55);z-index:5;text-align:center;white-space:nowrap;}' +
+      '.unofficial-note{margin:8px auto 0;max-width:560px;text-align:center;color:#b91c1c;font-weight:600;font-size:9.5px;border:1px solid #fecaca;background:#fef2f2;padding:6px 10px;border-radius:5px;line-height:1.3;}' +
       '.cell-role{font-weight:700;color:#0f172a;}' +
       '.cell-name{color:#334155;}' +
-      '.mini-sig{display:inline-block;max-height:26px;max-width:120px;object-fit:contain;object-position:center;vertical-align:middle;}' +
-      '.pill{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap;}' +
+      '.mini-sig{display:inline-block;max-height:19px;max-width:90px;object-fit:contain;object-position:center;vertical-align:middle;}' +
+      '.pill{display:inline-block;padding:1px 5px;border-radius:999px;font-size:8px;font-weight:800;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap;}' +
       '.pill-cleared{background:#d1fae5;color:#047857;border:1px solid #6ee7b7;}' +
       '.pill-pending{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}' +
       '.pill-hold{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;}' +
-      '@page{size:A4;margin:12mm;}' +
+      '@page{size:letter portrait;margin:0.3in;}' +
       '@media print{' +
-      'body{padding:0;}' +
-      '.sheet{max-width:100%;border-radius:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;}' +
+      'html,body{margin:0;padding:0;width:100%;}' +
+      '.sheet{width:100%;max-width:100%;max-height:10.3in;overflow:hidden;box-sizing:border-box;margin:0 auto;padding:10px 12px;border-width:2px;border-radius:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;page-break-inside:avoid;break-inside:avoid;}' +
       '.verify-zone,.seal-box,.verify-side,.qr-wrap,.digiseal,.seal,.unofficial-note,.sigs,.sig,.footer{page-break-inside:avoid;break-inside:avoid;}' +
       'tr{page-break-inside:avoid;break-inside:avoid;}' +
       '.footer{page-break-before:auto;}' +
       '}' +
-      '.sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 18px;margin-top:44px;}' +
-      '.sig{text-align:center;font-size:11px;color:#334155;}' +
+      '.sigs{display:grid;grid-template-columns:repeat(3,1fr);gap:6px 10px;margin-top:10px;}' +
+      '.sig{text-align:center;font-size:8.5px;line-height:1.15;color:#334155;}' +
       // The image sits directly above the printed name. The slot is a fixed
       // height on EVERY cell, cleared or not, so the names and lines of the nine
       // offices stay aligned across each grid row instead of riding up and down
-      // depending on who has signed.
-      '.sig .sigimg{height:46px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:3px;}' +
-      '.sig .sigimg img{max-height:44px;max-width:90%;object-fit:contain;object-position:bottom center;}' +
-      '.sig .sig-badge{display:inline-block;padding:3px 10px;border-radius:999px;font-size:9.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;line-height:1.4;margin-bottom:8px;}' +
+      // depending on who has signed. The height is now 18px for the one-page fit.
+      '.sig .sigimg{height:18px;display:flex;align-items:flex-end;justify-content:center;margin-bottom:1px;}' +
+      '.sig .sigimg img{max-height:18px;max-width:90%;object-fit:contain;object-position:bottom center;}' +
+      '.sig .sig-badge{display:inline-block;padding:1px 5px;border-radius:999px;font-size:7.5px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;line-height:1.2;margin-bottom:2px;}' +
       '.sig .sig-badge-pending{background:#fef3c7;color:#92400e;border:1px solid #fcd34d;}' +
       '.sig .sig-badge-hold{background:#fee2e2;color:#b91c1c;border:1px solid #fca5a5;}' +
-      '.sig .name{font-weight:700;color:#0f172a;font-size:11.5px;min-height:17px;line-height:1.3;margin-bottom:6px;}' +
+      '.sig .name{font-weight:700;color:#0f172a;font-size:9px;min-height:11px;line-height:1.1;margin-bottom:2px;}' +
       '.sig .line{border-top:1px solid #334155;}' +
-      '.sig .role{color:#475569;margin-top:5px;line-height:1.3;}' +
-      '.sig.president{grid-column:1/-1;margin-top:20px;}' +
-      '.sig.president .name{font-size:12px;}' +
+      '.sig .role{color:#475569;margin-top:2px;line-height:1.1;}' +
+      '.sig.president{grid-column:1/-1;margin-top:6px;}' +
+      '.sig.president .name{font-size:9.5px;}' +
       '.sig.president .role{font-weight:600;color:#0f172a;}' +
-      '.footer{margin-top:30px;padding-top:14px;border-top:1px solid #cbd5e1;}' +
-      '.footer .reminder{color:#b91c1c;font-weight:700;font-size:11px;text-align:center;}' +
-      '.foot{margin-top:14px;text-align:center;font-size:10px;color:#64748b;}' +
-      // Screen preview on a phone: keep the A4 layout for printing, but make the
-      // on-screen preview fit a 360px–480px viewport without sideways scrolling.
+      '.footer{margin-top:8px;padding-top:5px;border-top:1px solid #cbd5e1;}' +
+      '.footer .reminder{color:#b91c1c;font-weight:700;font-size:9px;text-align:center;line-height:1.2;}' +
+      '.foot{margin-top:4px;text-align:center;font-size:8px;color:#64748b;}' +
+      // Screen preview on a phone: keep the Letter layout for printing, but make
+      // the on-screen preview fit a 360px–480px viewport without sideways scrolling.
       '@media screen and (max-width:768px){' +
-      'body{padding:12px;}' +
-      '.sheet{max-width:100%;padding:16px;border-width:2px;border-radius:6px;}' +
-      'h1{font-size:20px;}' +
-      '.info{gap:10px;font-size:12px;}' +
-      'th,td{padding:6px 7px;font-size:11px;}' +
-      '.verify-zone{gap:12px;flex-wrap:wrap;}' +
-      '.sigs{grid-template-columns:repeat(2,1fr);gap:12px;margin-top:24px;}' +
+      'body{padding:10px;}' +
+      '.sheet{max-width:100%;padding:10px;border-width:2px;border-radius:4px;}' +
+      'h1{font-size:16px;}' +
+      '.info{gap:6px;font-size:10px;}' +
+      'th,td{padding:3px 5px;font-size:9.5px;}' +
+      '.verify-zone{gap:10px;flex-wrap:wrap;}' +
+      '.sigs{grid-template-columns:repeat(2,1fr);gap:6px 8px;margin-top:8px;}' +
       '.sig.president{grid-column:1/-1;}' +
-      '.stamp-unofficial{font-size:14px;padding:7px 14px;white-space:normal;}' +
-      '.unofficial-note{font-size:10.5px;}' +
+      '.stamp-unofficial{font-size:11px;padding:5px 10px;white-space:normal;}' +
+      '.unofficial-note{font-size:9px;}' +
       '}' +
       '</style></head><body><div class="sheet">' +
       '<div class="head"><div class="school">TALISAY CITY COLLEGE</div><h1>CLEARANCE FORM</h1>' +

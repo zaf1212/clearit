@@ -333,11 +333,38 @@ body .sa-column-toggle[aria-pressed="true"]:hover {
 }
 
 /* ---------- Print (certificate window) ---------- */
+/* Letter / Short Bond, with small margins so browsers omit their default
+   URL/date/title headers and footers. The generated clearance window carries
+   the same @page rule in its inline stylesheet. */
+@page {
+  size: letter portrait;
+  margin: 0.3in;
+}
+
 @media print {
+  html,
+  body {
+    width: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
   body,
   body.dark-theme {
     background: #fff !important;
     color: #000 !important;
+  }
+
+  /* Any printable sheet — including the generated clearance form — is clipped
+     to one Letter page instead of silently flowing onto a second sheet. */
+  .sheet,
+  .print-container {
+    width: 100%;
+    max-height: 10.3in;
+    overflow: hidden;
+    box-sizing: border-box;
+    page-break-inside: avoid;
+    break-inside: avoid;
   }
 }
 
